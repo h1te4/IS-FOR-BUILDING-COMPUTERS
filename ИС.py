@@ -14,11 +14,15 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QIcon
 
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Информационная система для сборки ПК")
         self.setGeometry(100, 100, 800, 600)
+
+        # Атрибут для текущей категории
+        self.current_category = None  # Инициализация
 
         # Подключение к базе данных
         self.db_connection = self.connect_to_db()
@@ -42,13 +46,12 @@ class MainWindow(QMainWindow):
 
     def connect_to_db(self):
         try:
-            # Подключение к базе данных
             conn = psycopg2.connect(
-                dbname="ИС",  # Имя базы данных
-                user="postgres",  # Имя пользователя
-                password="35900956",  # Пароль пользователя
-                host="localhost",  # Хост, обычно "localhost"
-                port="5432"  # Порт по умолчанию для PostgreSQL
+                dbname="ИС",
+                user="postgres",
+                password="35900956",
+                host="localhost",
+                port="5432"
             )
             print("Подключение к базе данных успешно!")
             return conn
@@ -119,22 +122,26 @@ class MainWindow(QMainWindow):
 
         # Секция выбора комплектующих
         components_layout = QHBoxLayout()
+        self.component_buttons = {}  # Словарь для хранения кнопок
+
         components = [
-            ("Видеокарта", "Видеокарты"),
-            ("Процессор", "Процессоры"),
-            ("Мат. плата", "Мат. платы"),
-            ("Корпус", "Корпуса"),
+            ("Видеокарта", "Видеокарта"),
+            ("Процессор", "Процессор"),
+            ("Мат. плата", "Материнская плата"),
+            ("Корпус", "Корпус"),
             ("Охлаждение процессора", "Охлаждения процессора"),
             ("Оперативная память", "Оперативная память"),
-            ("Накопители", "Накопители"),
+            ("Накопители", "Накопитель"),
             ("Блок питания", "Блок питания"),
             ("Доп. детали", "Доп. детали")
         ]
+
         for label, category in components:
             btn = QPushButton(label)
             btn.setFixedHeight(40)
             btn.clicked.connect(lambda checked, c=category: self.show_components_for_category(c))
             components_layout.addWidget(btn)
+            self.component_buttons[category] = btn  # Сохраняем кнопку в словарь
 
         # Добавление элементов в основной макет
         layout.addLayout(top_bar)
@@ -142,22 +149,48 @@ class MainWindow(QMainWindow):
 
         # Список компонентов для новой сборки
         self.new_build_list = QListWidget()
+        self.new_build_list.itemDoubleClicked.connect(self.select_component)  # Обработчик двойного клика
         layout.addWidget(self.new_build_list)
 
         screen.setLayout(layout)
         return screen
 
+    def select_component(self, item):
+        """Обработка двойного клика на элемент списка компонентов"""
+        try:
+            # Извлекаем название компонента
+            selected_component = item.text().split('\n')[0].split(': ')[1]  # После ": " идёт название
+            for category, btn in self.component_buttons.items():
+                if self.current_category == category:  # Проверяем текущую категорию
+                    btn.setText(f"{category}\n{selected_component}")
+                    break
+        except Exception as e:
+            print(f"Ошибка при выборе компонента: {e}")
+
     def show_components_for_category(self, category):
         """Отображение компонентов для выбранной категории на вкладке 'Новая сборка'"""
-        self.cursor.execute("SELECT * FROM components WHERE category = %s", (category,))
-        components = self.cursor.fetchall()
+        try:
+            self.current_category = category  # Обновляем текущую категорию
+            self.cursor.execute("SELECT category, name, price, description FROM components WHERE category = %s",
+                                (category,))
+            components = self.cursor.fetchall()
 
-        # Очищаем старый список компонентов
-        self.new_build_list.clear()
+            # Проверка на пустой результат
+            if not components:
+                print(f"Компоненты для категории '{category}' не найдены.")
+                self.new_build_list.clear()
+                return
 
-        for component in components:
-            item = QListWidgetItem(f"{component[1]}\nЦена: {component[4]} руб.\nОписание: {component[3]}")
-            self.new_build_list.addItem(item)
+            # Очищаем старый список компонентов
+            self.new_build_list.clear()
+
+            for component in components:
+                # Формируем строку: категория + название
+                item_text = f"{component[0]}: {component[1]}\nЦена: {component[2]} руб.\nОписание: {component[3]}"
+                item = QListWidgetItem(item_text)
+                self.new_build_list.addItem(item)
+        except Exception as e:
+            print(f"Ошибка при загрузке компонентов: {e}")
 
     def create_components_screen(self):
         """Создание экрана склада комплектующих"""
