@@ -24,6 +24,12 @@ class MainWindow(QMainWindow):
         # Атрибут для текущей категории
         self.current_category = None  # Инициализация
 
+        # Инициализация переменной для хранения общей стоимости сборки
+        self.total_price = 0
+
+        # Словарь для отслеживания выбранных компонентов и их цен
+        self.selected_components = {}
+
         # Подключение к базе данных
         self.db_connection = self.connect_to_db()
         self.cursor = self.db_connection.cursor()
@@ -152,14 +158,42 @@ class MainWindow(QMainWindow):
         self.new_build_list.itemDoubleClicked.connect(self.select_component)  # Обработчик двойного клика
         layout.addWidget(self.new_build_list)
 
+        # Метка для отображения цены сборки
+        self.build_price_label = QLabel("Цена: 0 руб.")
+        layout.addWidget(self.build_price_label)
+
         screen.setLayout(layout)
         return screen
+
+    def update_build_price(self):
+        """Метод для обновления общей цены сборки"""
+        self.total_price = sum(self.selected_components.values())  # Суммируем только уникальные компоненты
+        self.build_price_label.setText(f"Цена: {self.total_price} руб.")
 
     def select_component(self, item):
         """Обработка двойного клика на элемент списка компонентов"""
         try:
-            # Извлекаем название компонента
-            selected_component = item.text().split('\n')[0].split(': ')[1]  # После ": " идёт название
+            # Извлекаем название компонента и его цену
+            component_info = item.text().split('\n')
+            selected_component = component_info[0].split(': ')[1]  # Название компонента
+            component_price = float(component_info[1].split(': ')[1].split(' ')[0])  # Цена компонента
+
+            # Если компонент уже был выбран в этой категории, вычитаем его цену
+            if self.current_category in self.selected_components:
+                old_component = self.selected_components[self.current_category]
+                old_price = old_component  # Извлекаем старую цену
+                self.total_price -= old_price  # Вычитаем старую цену
+
+            # Обновляем или добавляем новый компонент в выбранной категории
+            self.selected_components[self.current_category] = component_price  # Храним только цену
+
+            # Добавляем цену нового компонента
+            self.total_price += component_price
+
+            # Обновляем цену сборки
+            self.update_build_price()
+
+            # Обновляем текст на кнопке для отображения текущего выбранного компонента
             for category, btn in self.component_buttons.items():
                 if self.current_category == category:  # Проверяем текущую категорию
                     btn.setText(f"{category}\n{selected_component}")
