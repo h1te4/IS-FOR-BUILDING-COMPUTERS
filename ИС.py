@@ -13,7 +13,6 @@ from PyQt5.QtWidgets import (
     QListWidgetItem
 )
 from PyQt5.QtGui import QIcon
-from decimal import Decimal
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -47,7 +46,7 @@ class MainWindow(QMainWindow):
             conn = psycopg2.connect(
                 dbname="ИС",  # Имя базы данных
                 user="postgres",  # Имя пользователя
-                password="35900956",  # Пароль пользоват
+                password="35900956",  # Пароль пользователя
                 host="localhost",  # Хост, обычно "localhost"
                 port="5432"  # Порт по умолчанию для PostgreSQL
             )
@@ -179,6 +178,7 @@ class MainWindow(QMainWindow):
         for component in components:
             item = QListWidgetItem(f"{component[1]}\nЦена: {component[4]} руб.\nОписание: {component[3]}")
             self.components_list.addItem(item)
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
