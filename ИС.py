@@ -1,5 +1,7 @@
 import sys
 import psycopg2
+import os
+from dotenv import load_dotenv  # Импортируем load_dotenv
 from PyQt5.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -14,6 +16,8 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QIcon
 
+# Загружаем переменные окружения из .env файла
+load_dotenv()
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -51,13 +55,14 @@ class MainWindow(QMainWindow):
         self.central_widget.addWidget(self.components_screen)
 
     def connect_to_db(self):
+        """Подключение к базе данных с использованием конфигурации из .env"""
         try:
             conn = psycopg2.connect(
-                dbname="ИС",
-                user="postgres",
-                password="35900956",
-                host="localhost",
-                port="5432"
+                dbname=os.getenv('DB_NAME'),
+                user=os.getenv('DB_USER'),
+                password=os.getenv('DB_PASSWORD'),
+                host=os.getenv('DB_HOST'),
+                port=os.getenv('DB_PORT')
             )
             print("Подключение к базе данных успешно!")
             return conn
@@ -100,14 +105,13 @@ class MainWindow(QMainWindow):
         return screen
 
     def create_new_build_screen(self):
-        """Создание экрана новой сборки"""
         screen = QWidget()
         layout = QVBoxLayout()
 
         # Верхняя панель
         top_bar = QHBoxLayout()
         back_btn = QPushButton()
-        back_btn.setIcon(QIcon("back_icon.png"))  # Замените на путь к иконке
+        back_btn.setIcon(QIcon("back.png"))  # Замените на путь к иконке
         back_btn.setFixedSize(40, 40)
         back_btn.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.main_menu))
 
@@ -116,7 +120,7 @@ class MainWindow(QMainWindow):
         save_btn = QPushButton("Сохранить")
         delete_btn = QPushButton("Удалить")
         profile_btn = QPushButton()
-        profile_btn.setIcon(QIcon("user_icon.png"))  # Замените на путь к иконке
+        profile_btn.setIcon(QIcon("man.png"))  # Замените на путь к иконке
         profile_btn.setFixedSize(50, 50)
 
         top_bar.addWidget(back_btn)
@@ -241,11 +245,13 @@ class MainWindow(QMainWindow):
 
     def load_and_display_all_components(self):
         """Загрузка и отображение всех компонентов на вкладке 'Склад комплектующих'"""
-        components = self.load_components()
-        for component in components:
-            item = QListWidgetItem(f"{component[1]}\nЦена: {component[4]} руб.\nОписание: {component[3]}")
-            self.components_list.addItem(item)
+        self.cursor.execute("SELECT category, name, price FROM components")
+        components = self.cursor.fetchall()
 
+        for component in components:
+            item_text = f"{component[0]}: {component[1]}\nЦена: {component[2]} руб."
+            item = QListWidgetItem(item_text)
+            self.components_list.addItem(item)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
