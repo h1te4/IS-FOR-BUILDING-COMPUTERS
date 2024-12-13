@@ -1,7 +1,9 @@
 import sys
 import psycopg2
 import os
-from dotenv import load_dotenv  # Импортируем load_dotenv
+import requests
+from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 from PyQt5.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -11,13 +13,85 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QPushButton,
     QLabel,
+    QLineEdit,
+    QMessageBox,
     QListWidget,
     QListWidgetItem
 )
 from PyQt5.QtGui import QIcon
+from datetime import datetime
 
 # Загружаем переменные окружения из .env файла
 load_dotenv()
+
+# Конфигурация базы данных из .env файла
+DB_CONFIG = {
+    'dbname': os.getenv('DB_NAME'),
+    'user': os.getenv('DB_USER'),
+    'password': os.getenv('DB_PASSWORD'),
+    'host': os.getenv('DB_HOST'),
+    'port': os.getenv('DB_PORT')
+}
+# Функция для добавления компонентов в базу данных
+def add_component_to_db(category, name, price, description):
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+
+        query = """
+            INSERT INTO Компоненты (Категория, Название, Цена, Описание)
+            VALUES (%s, %s, %s, %s)
+        """
+        cursor.execute(query, (category, name, price, description))
+        conn.commit()
+
+        cursor.close()
+        conn.close()
+        print(f"{category} '{name}' добавлен в базу данных.")
+    except Exception as e:
+        print(f"Ошибка добавления компонента: {e}")
+
+# Функция для парсинга процессоров с DNS Shop
+def parse_processors():
+    url = 'https://www.dns-shop.ru/catalog/17a899cd16404e77/processory/?rsu-compatibility=1'
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.5845.111 Safari/537.36'
+    }
+
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        print(f"Ошибка запроса: {e}")
+        return
+
+    soup = BeautifulSoup(response.content, 'html.parser')
+
+    # Попробуем найти обновлённые классы
+    products = soup.find_all('div', class_='catalog-product')  # Обновлённый класс для товаров
+    if not products:
+        print("Не удалось найти компоненты на странице.")
+        return
+
+    for product in products:
+        try:
+            name_tag = product.find('a', class_='catalog-product__name')
+            price_tag = product.find('div', class_='product-buy__price')
+
+            if not name_tag or not price_tag:
+                print("Не найдены данные о компоненте.")
+                continue
+
+            name = name_tag.text.strip()
+            price = price_tag.text.strip().replace('₽', '').replace(' ', '')
+            description = "Описание не указано"
+
+            price = float(price.replace(',', '.'))
+
+            add_component_to_db('Процессоры', name, price, description)
+        except Exception as e:
+            print(f"Ошибка обработки компонента: {e}")
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -25,22 +99,23 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Информационная система для сборки ПК")
         self.setGeometry(100, 100, 800, 600)
 
-        # Атрибут для текущей категории
-        self.current_category = None  # Инициализация
-
         # Инициализация переменной для хранения общей стоимости сборки
         self.total_price = 0
 
         # Словарь для отслеживания выбранных компонентов и их цен
         self.selected_components = {}
 
-        # Подключение к базе данных
-        self.db_connection = self.connect_to_db()
-        self.cursor = self.db_connection.cursor()
+        # Подключение к базе данных через объект Database
+        self.db = Database()  # Здесь создаём экземпляр класса Database
+        self.cursor = self.db.cursor
 
         # Основной стек виджетов
         self.central_widget = QStackedWidget()
         self.setCentralWidget(self.central_widget)
+
+        # Экран профиля
+        self.profile_screen = self.create_profile_screen()
+        self.central_widget.addWidget(self.profile_screen)
 
         # Главный экран
         self.main_menu = self.create_main_menu()
@@ -54,33 +129,56 @@ class MainWindow(QMainWindow):
         self.components_screen = self.create_components_screen()
         self.central_widget.addWidget(self.components_screen)
 
-    def connect_to_db(self):
-        """Подключение к базе данных с использованием конфигурации из .env"""
+        # Экран активных сборок
+        self.active_builds_screen = self.create_active_builds_screen()
+        self.central_widget.addWidget(self.active_builds_screen)
+
+        # Сначала показываем главный экран, а не экран профиля
+        self.central_widget.setCurrentWidget(self.main_menu)
+
+    def create_profile_screen(self):
+        """Создание экрана профиля"""
+        screen = QWidget()
+        layout = QVBoxLayout()
+
+        self.profile_info_label = QLabel("Никнейм: null\nДата регистрации: --/--/----")
+        layout.addWidget(self.profile_info_label)
+
+        logout_button = QPushButton("Выход")
+        logout_button.clicked.connect(self.logout)
+        layout.addWidget(logout_button)
+
+        screen.setLayout(layout)
+        return screen
+
+    def logout(self):
+        self.profile_info_label.setText("Никнейм: null\nДата регистрации: --/--/----")
+        QMessageBox.information(self, "Выход", "Вы успешно вышли из профиля.")
+        self.show_main_menu_screen()
+
+    def show_main_menu_screen(self):
+        self.central_widget.setCurrentWidget(self.main_menu)
+
+    def register_user(self):
+        username = self.registration_username_input.text()
+        password = self.registration_password_input.text()
+
+        if not username or not password:
+            QMessageBox.warning(self, "Ошибка", "Все поля должны быть заполнены!")
+            return
+
         try:
-            conn = psycopg2.connect(
-                dbname=os.getenv('DB_NAME'),
-                user=os.getenv('DB_USER'),
-                password=os.getenv('DB_PASSWORD'),
-                host=os.getenv('DB_HOST'),
-                port=os.getenv('DB_PORT')
+            self.db.execute_query(
+                "INSERT INTO users (username, password) VALUES (%s, %s)",
+                (username, password)
             )
-            print("Подключение к базе данных успешно!")
-            return conn
+            QMessageBox.information(self, "Успех", "Регистрация успешна!")
+            self.show_profile_screen()
         except Exception as e:
-            print(f"Ошибка подключения к базе данных: {e}")
-            return None
+            QMessageBox.critical(self, "Ошибка", "Ошибка регистрации: пользователь уже существует!")
 
-    def load_components(self, category=None):
-        """Загрузка компонентов из базы данных с фильтрацией по категории"""
-        if category:
-            query = "SELECT * FROM components WHERE category = %s"
-            self.cursor.execute(query, (category,))
-        else:
-            query = "SELECT * FROM components"
-            self.cursor.execute(query)
-
-        components = self.cursor.fetchall()
-        return components
+    def show_profile_screen(self):
+        self.central_widget.setCurrentWidget(self.profile_screen)
 
     def create_main_menu(self):
         """Создание главного меню"""
@@ -94,6 +192,7 @@ class MainWindow(QMainWindow):
         btn_components = QPushButton("Склад комплектующих")
         btn_components.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.components_screen))
         btn_active_builds = QPushButton("Активные сборки")
+        btn_active_builds.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.active_builds_screen))
         btn_finished_builds = QPushButton("Завершённые сборки")
 
         for btn in [btn_new_build, btn_components, btn_active_builds, btn_finished_builds]:
@@ -105,23 +204,23 @@ class MainWindow(QMainWindow):
         return screen
 
     def create_new_build_screen(self):
+        """Создание экрана новой сборки"""
         screen = QWidget()
         layout = QVBoxLayout()
 
         # Верхняя панель
         top_bar = QHBoxLayout()
-        back_btn = QPushButton()
-        back_btn.setIcon(QIcon("back.png"))  # Замените на путь к иконке
-        back_btn.setFixedSize(40, 40)
+        back_btn = QPushButton("Назад")
+        back_btn.setFixedSize(60, 40)
         back_btn.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.main_menu))
 
         title_label = QLabel("Новая сборка")
         title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
         save_btn = QPushButton("Сохранить")
         delete_btn = QPushButton("Удалить")
-        profile_btn = QPushButton()
-        profile_btn.setIcon(QIcon("man.png"))  # Замените на путь к иконке
-        profile_btn.setFixedSize(50, 50)
+        profile_btn = QPushButton("Профиль")
+        profile_btn.setFixedSize(100, 40)
+        profile_btn.clicked.connect(self.show_profile_screen)  # Добавлен обработчик для кнопки Профиль
 
         top_bar.addWidget(back_btn)
         top_bar.addWidget(title_label)
@@ -151,7 +250,7 @@ class MainWindow(QMainWindow):
             btn.setFixedHeight(40)
             btn.clicked.connect(lambda checked, c=category: self.show_components_for_category(c))
             components_layout.addWidget(btn)
-            self.component_buttons[category] = btn  # Сохраняем кнопку в словарь
+            self.component_buttons[category] = btn
 
         # Добавление элементов в основной макет
         layout.addLayout(top_bar)
@@ -169,64 +268,53 @@ class MainWindow(QMainWindow):
         screen.setLayout(layout)
         return screen
 
-    def update_build_price(self):
-        """Метод для обновления общей цены сборки"""
-        self.total_price = sum(self.selected_components.values())  # Суммируем только уникальные компоненты
-        self.build_price_label.setText(f"Цена: {self.total_price} руб.")
-
     def select_component(self, item):
-        """Обработка двойного клика на элемент списка компонентов"""
         try:
-            # Извлекаем название компонента и его цену
-            component_info = item.text().split('\n')
-            selected_component = component_info[0].split(': ')[1]  # Название компонента
-            component_price = float(component_info[1].split(': ')[1].split(' ')[0])  # Цена компонента
+            lines = item.text().split('\n')
+            selected_component = lines[0].split(': ')[1]
+            component_price = float(lines[1].split(': ')[1].split(' ')[0])
 
-            # Если компонент уже был выбран в этой категории, вычитаем его цену
             if self.current_category in self.selected_components:
-                old_component = self.selected_components[self.current_category]
-                old_price = old_component  # Извлекаем старую цену
-                self.total_price -= old_price  # Вычитаем старую цену
+                old_price = self.selected_components[self.current_category]
+                self.total_price -= old_price
 
-            # Обновляем или добавляем новый компонент в выбранной категории
-            self.selected_components[self.current_category] = component_price  # Храним только цену
-
-            # Добавляем цену нового компонента
+            self.selected_components[self.current_category] = component_price
             self.total_price += component_price
 
-            # Обновляем цену сборки
             self.update_build_price()
 
-            # Обновляем текст на кнопке для отображения текущего выбранного компонента
-            for category, btn in self.component_buttons.items():
-                if self.current_category == category:  # Проверяем текущую категорию
-                    btn.setText(f"{category}\n{selected_component}")
-                    break
+            # Обновляем текст кнопки
+            if self.current_category in self.component_buttons:
+                btn = self.component_buttons[self.current_category]
+                btn.setText(f"{self.current_category}\n{selected_component}")
+
         except Exception as e:
             print(f"Ошибка при выборе компонента: {e}")
 
-    def show_components_for_category(self, category):
-        """Отображение компонентов для выбранной категории на вкладке 'Новая сборка'"""
-        try:
-            self.current_category = category  # Обновляем текущую категорию
-            self.cursor.execute("SELECT category, name, price, description FROM components WHERE category = %s",
-                                (category,))
-            components = self.cursor.fetchall()
+    def update_build_price(self):
+        """Обновление общей цены сборки"""
+        self.build_price_label.setText(f"Цена: {self.total_price} руб.")
 
-            # Проверка на пустой результат
+    def show_components_for_category(self, category):
+        """Отображение компонентов для выбранной категории"""
+        self.current_category = category
+        try:
+            if self.db.conn.closed:
+                # Повторное подключение к БД в случае разрыва
+                self.db = Database()
+                self.cursor = self.db.cursor
+
+            self.cursor.execute("SELECT Название, Цена, Описание FROM Компоненты WHERE Категория = %s", (category,))
+            components = self.cursor.fetchall()
+            self.new_build_list.clear()  # Очищаем список перед добавлением новых элементов
+
             if not components:
-                print(f"Компоненты для категории '{category}' не найдены.")
-                self.new_build_list.clear()
+                self.new_build_list.addItem(QListWidgetItem("Нет компонентов в этой категории."))
                 return
 
-            # Очищаем старый список компонентов
-            self.new_build_list.clear()
-
-            for component in components:
-                # Формируем строку: категория + название
-                item_text = f"{component[0]}: {component[1]}\nЦена: {component[2]} руб.\nОписание: {component[3]}"
-                item = QListWidgetItem(item_text)
-                self.new_build_list.addItem(item)
+            for name, price, description in components:
+                item_text = f"Название: {name}\nЦена: {price} руб.\nОписание: {description}"
+                self.new_build_list.addItem(QListWidgetItem(item_text))
         except Exception as e:
             print(f"Ошибка при загрузке компонентов: {e}")
 
@@ -235,26 +323,71 @@ class MainWindow(QMainWindow):
         screen = QWidget()
         layout = QVBoxLayout()
 
-        # Список компонентов
         self.components_list = QListWidget()
         self.load_and_display_all_components()
-
         layout.addWidget(self.components_list)
+
         screen.setLayout(layout)
         return screen
 
     def load_and_display_all_components(self):
-        """Загрузка и отображение всех компонентов на вкладке 'Склад комплектующих'"""
-        self.cursor.execute("SELECT category, name, price FROM components")
-        components = self.cursor.fetchall()
+        """Загрузка всех компонентов для отображения"""
+        try:
+            self.cursor.execute("SELECT Категория, Название, Цена FROM Компоненты")
+            components = self.cursor.fetchall()
 
-        for component in components:
-            item_text = f"{component[0]}: {component[1]}\nЦена: {component[2]} руб."
-            item = QListWidgetItem(item_text)
-            self.components_list.addItem(item)
+            self.components_list.clear()
+            for component in components:
+                item_text = f"{component[0]}: {component[1]}\nЦена: {component[2]} руб."
+                item = QListWidgetItem(item_text)
+                self.components_list.addItem(item)
+        except Exception as e:
+            print(f"Ошибка при загрузке компонентов: {e}")
+
+    def create_active_builds_screen(self):
+        """Создание экрана активных сборок"""
+        screen = QWidget()
+        layout = QVBoxLayout()
+
+        self.active_builds_list = QListWidget()
+        layout.addWidget(self.active_builds_list)
+
+        screen.setLayout(layout)
+        return screen
+
+
+class Database:
+    def __init__(self):
+        try:
+            self.conn = psycopg2.connect(**DB_CONFIG)
+            self.cursor = self.conn.cursor()
+            print("Подключение к базе данных успешно!")
+        except psycopg2.OperationalError as e:
+            print(f"Ошибка подключения к базе данных: {e}")
+            sys.exit(1)
+
+    def execute_query(self, query, params=None):
+        try:
+            self.cursor.execute(query, params)
+            self.conn.commit()
+        except Exception as e:
+            print("Ошибка выполнения запроса:", e)
+            self.conn.rollback()
+
+    def fetchone(self):
+        return self.cursor.fetchone()
+
+    def fetchall(self):
+        return self.cursor.fetchall()
+
+    def close(self):
+        self.cursor.close()
+        self.conn.close()
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
+    parse_processors()
     sys.exit(app.exec_())
