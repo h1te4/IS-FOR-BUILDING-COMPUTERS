@@ -51,48 +51,6 @@ def add_component_to_db(category, name, price, description):
     except Exception as e:
         print(f"Ошибка добавления компонента: {e}")
 
-# Функция для парсинга процессоров с DNS Shop
-def parse_processors():
-    url = 'https://www.dns-shop.ru/catalog/17a899cd16404e77/processory/?rsu-compatibility=1'
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.5845.111 Safari/537.36'
-    }
-
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-    except requests.RequestException as e:
-        print(f"Ошибка запроса: {e}")
-        return
-
-    soup = BeautifulSoup(response.content, 'html.parser')
-
-    # Попробуем найти обновлённые классы
-    products = soup.find_all('div', class_='catalog-product')  # Обновлённый класс для товаров
-    if not products:
-        print("Не удалось найти компоненты на странице.")
-        return
-
-    for product in products:
-        try:
-            name_tag = product.find('a', class_='catalog-product__name')
-            price_tag = product.find('div', class_='product-buy__price')
-
-            if not name_tag or not price_tag:
-                print("Не найдены данные о компоненте.")
-                continue
-
-            name = name_tag.text.strip()
-            price = price_tag.text.strip().replace('₽', '').replace(' ', '')
-            description = "Описание не указано"
-
-            price = float(price.replace(',', '.'))
-
-            add_component_to_db('Процессоры', name, price, description)
-        except Exception as e:
-            print(f"Ошибка обработки компонента: {e}")
-
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -304,7 +262,7 @@ class MainWindow(QMainWindow):
                 self.db = Database()
                 self.cursor = self.db.cursor
 
-            self.cursor.execute("SELECT Название, Цена, Описание FROM Компоненты WHERE Категория = %s", (category,))
+            self.cursor.execute("SELECT Категория, Название, Цена, Описание FROM Компоненты WHERE Категория = %s", (category,))
             components = self.cursor.fetchall()
             self.new_build_list.clear()  # Очищаем список перед добавлением новых элементов
 
@@ -312,8 +270,8 @@ class MainWindow(QMainWindow):
                 self.new_build_list.addItem(QListWidgetItem("Нет компонентов в этой категории."))
                 return
 
-            for name, price, description in components:
-                item_text = f"Название: {name}\nЦена: {price} руб.\nОписание: {description}"
+            for category, name, price, description in components:
+                item_text = f"{category}: {name}\nЦена: {price} руб.\nОписание: {description}"
                 self.new_build_list.addItem(QListWidgetItem(item_text))
         except Exception as e:
             print(f"Ошибка при загрузке компонентов: {e}")
@@ -389,5 +347,4 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
-    parse_processors()
     sys.exit(app.exec_())
