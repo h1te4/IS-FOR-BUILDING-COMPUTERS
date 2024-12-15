@@ -139,9 +139,20 @@ class MainWindow(QMainWindow):
         screen.setLayout(layout)
         return screen
 
-    # Проверка статуса пользователя
+    # Проверка зарегистрирован ли пользователь
     def is_user_logged_in(self):
         return self.username is not None
+
+    def get_user_id(self):
+        if not self.is_user_logged_in():
+            return None
+
+        self.cursor.execute("SELECT id FROM Пользователи WHERE Никнейм = %s", (self.username,))
+        result = self.cursor.fetchone()
+        if result:
+            return result[0]
+        else:
+            return None
 
     # Выход из профиля
     def logout(self):
@@ -151,8 +162,10 @@ class MainWindow(QMainWindow):
 
     # Обновление экрана профиля
     def refresh_profile_screen(self):
-        new_screen = self.create_profile_screen()
-        self.setCentralWidget(new_screen)
+        self.profile_screen = self.create_profile_screen()
+        self.central_widget.removeWidget(self.central_widget.widget(0))  # Удаляем старый профиль
+        self.central_widget.insertWidget(0, self.profile_screen)  # Вставляем новый профиль
+        self.central_widget.setCurrentWidget(self.profile_screen)  # Переключаемся на новый профиль
 
     # Открытие окна регистрации
     def open_registration_window(self):
@@ -203,7 +216,6 @@ class MainWindow(QMainWindow):
     def show_profile_screen(self):
         self.central_widget.setCurrentWidget(self.profile_screen)
 
-
     def create_main_menu(self):
         """Создание главного меню"""
         screen = QWidget()
@@ -213,12 +225,18 @@ class MainWindow(QMainWindow):
         buttons_layout = QVBoxLayout()
         btn_new_build = QPushButton("Новая сборка")
         btn_new_build.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.new_build_screen))
+
         btn_components = QPushButton("Склад комплектующих")
         btn_components.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.components_screen))
-        btn_active_builds = QPushButton("Активные сборки")
-        btn_active_builds.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.active_builds_screen))
-        btn_finished_builds = QPushButton("Завершённые сборки")
 
+        btn_active_builds = QPushButton("Активные сборки")
+        btn_active_builds.clicked.connect(
+            lambda: self.central_widget.setCurrentWidget(self.active_builds_screen))  # Исправлено
+
+        btn_finished_builds = QPushButton("Завершённые сборки")
+        btn_finished_builds.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.finished_builds_screen))
+
+        # Добавляем кнопки в макет
         for btn in [btn_new_build, btn_components, btn_active_builds, btn_finished_builds]:
             btn.setFixedHeight(50)
             buttons_layout.addWidget(btn)
@@ -304,6 +322,11 @@ class MainWindow(QMainWindow):
         return screen
 
     def save_build(self):
+        # Проверка, авторизован ли пользователь
+        if not self.is_user_logged_in():
+            QMessageBox.warning(self, "Ошибка", "Вы должны войти в профиль, чтобы сохранить сборку!")
+            return
+
         build_name = self.build_name_input.text()
 
         # Проверка, чтобы название сборки не было пустым
@@ -317,7 +340,7 @@ class MainWindow(QMainWindow):
             self.cursor.execute(
                 "INSERT INTO \"Сборки\" (\"Название_сборки\", \"Общая_цена\", \"id_пользователя\", \"Статус_сборки\") "
                 "VALUES (%s, %s, %s, %s) RETURNING id",
-                (build_name, self.total_price, 1, 'Активная')  # Пример: id пользователя = 1, статус "Активная"
+                (build_name, self.total_price, self.get_user_id(), 'Активная')
             )
             build_id = self.cursor.fetchone()[0]  # Получаем ID только что вставленной сборки
             self.db.conn.commit()
@@ -337,56 +360,50 @@ class MainWindow(QMainWindow):
             self.db.conn.rollback()  # Если ошибка, откатываем изменения
             QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении сборки: {str(e)}")
 
-    def delete_build(self):
-        build_name = self.build_name_input.text()
-
-        # Проверка, чтобы название сборки не было пустым
-        if not build_name.strip():
-            QMessageBox.warning(self, "Ошибка", "Пожалуйста, введите название сборки для удаления!")
-            return
-
+    def delete_build(self, build_id):
         try:
-            # Получаем id текущего пользователя (например, id пользователя = 1)
-            current_user_id = 1  # Здесь можно заменить на реальный id текущего пользователя
-
-            # Проверка, существует ли сборка с таким названием и принадлежит ли она текущему пользователю
-            self.cursor.execute(
-                "SELECT id, \"id_пользователя\" FROM \"Сборки\" WHERE \"Название_сборки\" = %s AND \"Статус_сборки\" = %s",
-                (build_name, 'Активная')
-            )
-            result = self.cursor.fetchone()
-
-            if result:
-                build_id, owner_id = result  # Получаем id сборки и id владельца
-
-                if owner_id != current_user_id:
-                    # Если пользователь не является владельцем сборки
-                    QMessageBox.warning(self, "Ошибка", "Вы не можете удалить чужую сборку!")
-                    return
-
-                # Сборка найдена, подтверждаем удаление
-                reply = QMessageBox.question(self, 'Подтвердите удаление',
-                                             f"Вы действительно хотите удалить сборку '{build_name}'?",
-                                             QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-
-                if reply == QMessageBox.Yes:
-                    # Удаляем все компоненты этой сборки
-                    self.cursor.execute(
-                        "DELETE FROM \"Компоненты_сборки\" WHERE \"id_сборки\" = %s", (build_id,)
-                    )
-                    # Удаляем саму сборку
-                    self.cursor.execute(
-                        "DELETE FROM \"Сборки\" WHERE id = %s", (build_id,)
-                    )
-                    self.db.conn.commit()
-                    QMessageBox.information(self, "Удаление", f"Сборка '{build_name}' успешно удалена.")
-                    self.central_widget.setCurrentWidget(self.main_menu)  # Перенаправление на главный экран
-            else:
-                # Сборка с таким названием не найдена или не активна
-                QMessageBox.warning(self, "Ошибка", "Сборка с таким названием не найдена или не активна.")
+            self.cursor.execute("DELETE FROM \"Сборки\" WHERE id = %s", (build_id,))
+            self.db.conn.commit()
+            QMessageBox.information(self, "Успех", "Сборка удалена.")
+            self.show_active_builds()  # Перезагружаем список
         except Exception as e:
-            self.db.conn.rollback()  # Если ошибка, откатываем изменения
-            QMessageBox.critical(self, "Ошибка", f"Ошибка при удалении сборки: {str(e)}")
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при удалении сборки: {e}")
+
+    def finish_build(self, build_id):
+        try:
+            self.cursor.execute("""
+                UPDATE "Сборки" 
+                SET Статус_сборки = 'Завершенная' 
+                WHERE id = %s
+            """, (build_id,))
+            self.db.conn.commit()
+            QMessageBox.information(self, "Успех", "Сборка перенесена в завершенные.")
+            self.show_active_builds()  # Перезагружаем список
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при завершении сборки: {e}")
+
+    def edit_build(self, build_id):
+        try:
+            # Получаем текущие данные сборки
+            self.cursor.execute("""
+                SELECT Название_сборки, Общая_цена 
+                FROM "Сборки" 
+                WHERE id = %s
+            """, (build_id,))
+            build = self.cursor.fetchone()
+
+            if build:
+                build_name, total_price = build
+                self.open_build_editor(build_id, build_name, total_price)
+            else:
+                QMessageBox.warning(self, "Ошибка", "Сборка не найдена.")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при открытии сборки: {e}")
+
+    def open_build_editor(self, build_id, build_name, total_price):
+        editor_window = BuildEditor(self, build_id, build_name, total_price)
+        editor_window.show()
+
 
     def select_component(self, item):
         try:
@@ -465,15 +482,86 @@ class MainWindow(QMainWindow):
             print(f"Ошибка при загрузке компонентов: {e}")
 
     def create_active_builds_screen(self):
-        """Создание экрана активных сборок"""
+        # Создание экрана активных сборок
         screen = QWidget()
         layout = QVBoxLayout()
 
         self.active_builds_list = QListWidget()
         layout.addWidget(self.active_builds_list)
+        
+        back_button = QPushButton("Назад")
+        back_button.clicked.connect(self.show_main_menu_screen)
+        layout.addWidget(back_button)
+
+        # Вызов метода для отображения активных сборок
+        self.show_active_builds()
 
         screen.setLayout(layout)
         return screen
+
+    def show_active_builds(self):
+        try:
+            # Очищаем список перед обновлением
+            self.active_builds_list.clear()
+
+            # Получаем активные сборки из базы данных
+            self.cursor.execute("""
+                SELECT id, Название_сборки, Общая_цена 
+                FROM "Сборки" 
+                WHERE Статус_сборки = 'Активная' AND id_пользователя = %s
+            """, (self.get_user_id(),))
+            builds = self.cursor.fetchall()
+
+            if not builds:
+                self.active_builds_list.addItem("У вас нет активных сборок.")
+            else:
+                for build in builds:
+                    build_id, build_name, total_price = build
+                    item_text = f"{build_name} — {total_price} руб."
+                    item = QListWidgetItem(item_text)
+                    item.setData(1, build_id)  # Сохраняем ID сборки
+                    self.active_builds_list.addItem(item)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить сборки: {e}")
+
+
+class BuildEditor(QWidget):
+    def __init__(self, parent, build_id, build_name, total_price):
+        super().__init__(parent)
+        self.build_id = build_id
+        self.setWindowTitle("Редактирование сборки")
+        layout = QVBoxLayout()
+
+        # Поле для редактирования названия
+        self.name_input = QLineEdit()
+        self.name_input.setText(build_name)
+        layout.addWidget(QLabel("Название сборки:"))
+        layout.addWidget(self.name_input)
+
+        # Кнопка "Сохранить"
+        save_button = QPushButton("Сохранить")
+        save_button.clicked.connect(self.save_changes)
+        layout.addWidget(save_button)
+
+        self.setLayout(layout)
+
+    def save_changes(self):
+        new_name = self.name_input.text()
+        try:
+            self.parent().cursor.execute("""
+                UPDATE "Сборки" 
+                SET Название_сборки = %s
+                WHERE id = %s
+            """, (new_name, self.build_id))
+            self.parent().db.conn.commit()
+            QMessageBox.information(self, "Успех", "Сборка обновлена.")
+            self.close()
+            self.parent().show_active_builds()
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении изменений: {e}")
+
+
 class AuthWindow(QWidget):
     def __init__(self, parent, mode="login"):
         super().__init__()
