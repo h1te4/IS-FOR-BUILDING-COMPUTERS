@@ -1,5 +1,6 @@
 import sys
 import psycopg2
+import bcrypt
 import os
 import requests
 from bs4 import BeautifulSoup
@@ -59,6 +60,9 @@ class MainWindow(QMainWindow):
 
         # Инициализация переменной для хранения общей стоимости сборки
         self.total_price = 0
+        # Начальные значения никнейма и даты регистрации
+        self.username = None
+        self.registration_date = None
 
         # Словарь для отслеживания выбранных компонентов и их цен
         self.selected_components = {}
@@ -95,24 +99,81 @@ class MainWindow(QMainWindow):
         self.central_widget.setCurrentWidget(self.main_menu)
 
     def create_profile_screen(self):
-        """Создание экрана профиля"""
         screen = QWidget()
         layout = QVBoxLayout()
 
-        self.profile_info_label = QLabel("Никнейм: null\nДата регистрации: --/--/----")
-        layout.addWidget(self.profile_info_label)
+        # Верхняя панель с кнопкой "Назад"
+        top_bar = QHBoxLayout()
+        back_button = QPushButton("Назад")
+        back_button.clicked.connect(self.show_main_menu_screen)  # Переход в главное меню
+        top_bar.addWidget(back_button)
 
-        logout_button = QPushButton("Выход")
-        logout_button.clicked.connect(self.logout)
-        layout.addWidget(logout_button)
+        top_bar.addStretch()  # Раздвигает элементы вправо, оставляя кнопку слева
+
+        layout.addLayout(top_bar)  # Добавляем верхнюю панель в layout
+
+        if self.is_user_logged_in():
+            # Если пользователь авторизован
+            self.profile_info_label = QLabel(f"Никнейм: {self.username}\nДата регистрации: {self.registration_date}")
+            layout.addWidget(self.profile_info_label)
+
+            # Кнопка выхода
+            logout_button = QPushButton("Выход")
+            logout_button.clicked.connect(self.logout)
+            layout.addWidget(logout_button)
+        else:
+            # Если пользователь не авторизован
+            self.profile_info_label = QLabel("Вы не вошли в профиль")
+            layout.addWidget(self.profile_info_label)
+
+            # Кнопка регистрации
+            register_button = QPushButton("Регистрация")
+            register_button.clicked.connect(self.open_registration_window)
+            layout.addWidget(register_button)
+
+            # Кнопка входа
+            login_button = QPushButton("Вход")
+            login_button.clicked.connect(self.open_login_window)
+            layout.addWidget(login_button)
 
         screen.setLayout(layout)
         return screen
 
+    # Проверка статуса пользователя
+    def is_user_logged_in(self):
+        return self.username is not None
+
+    # Выход из профиля
     def logout(self):
-        self.profile_info_label.setText("Никнейм: null\nДата регистрации: --/--/----")
-        QMessageBox.information(self, "Выход", "Вы успешно вышли из профиля.")
-        self.show_main_menu_screen()
+        self.username = None
+        self.registration_date = None
+        self.refresh_profile_screen()
+
+    # Обновление экрана профиля
+    def refresh_profile_screen(self):
+        new_screen = self.create_profile_screen()
+        self.setCentralWidget(new_screen)
+
+    # Открытие окна регистрации
+    def open_registration_window(self):
+        self.registration_window = AuthWindow(self, mode="register")
+        self.registration_window.show()
+
+    # Открытие окна входа
+    def open_login_window(self):
+        self.login_window = AuthWindow(self, mode="login")
+        self.login_window.show()
+
+    # Логин пользователя
+    def login_user(self, username):
+        self.username = username
+        self.registration_date = self.get_registration_date(username)
+        self.refresh_profile_screen()
+
+    # Получение даты регистрации
+    def get_registration_date(self, username):
+        self.cursor.execute("SELECT Дата_регистрации FROM Пользователи WHERE Никнейм = %s", (username,))
+        return self.cursor.fetchone()[0]
 
     def show_main_menu_screen(self):
         self.central_widget.setCurrentWidget(self.main_menu)
@@ -130,6 +191,10 @@ class MainWindow(QMainWindow):
                 "INSERT INTO users (username, password) VALUES (%s, %s)",
                 (username, password)
             )
+
+            # Хеш пароля
+            hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+
             QMessageBox.information(self, "Успех", "Регистрация успешна!")
             self.show_profile_screen()
         except Exception as e:
@@ -137,6 +202,7 @@ class MainWindow(QMainWindow):
 
     def show_profile_screen(self):
         self.central_widget.setCurrentWidget(self.profile_screen)
+
 
     def create_main_menu(self):
         """Создание главного меню"""
@@ -175,7 +241,9 @@ class MainWindow(QMainWindow):
         title_label = QLabel("Новая сборка")
         title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
         save_btn = QPushButton("Сохранить")
+        save_btn.clicked.connect(self.save_build)  # Обработчик для кнопки "Сохранить"
         delete_btn = QPushButton("Удалить")
+        delete_btn.clicked.connect(self.delete_build)  # Обработчик для кнопки "Удалить"
         profile_btn = QPushButton("Профиль")
         profile_btn.setFixedSize(100, 40)
         profile_btn.clicked.connect(self.show_profile_screen)  # Добавлен обработчик для кнопки Профиль
@@ -222,9 +290,103 @@ class MainWindow(QMainWindow):
         # Метка для отображения цены сборки
         self.build_price_label = QLabel("Цена: 0 руб.")
         layout.addWidget(self.build_price_label)
+        # Нижняя панель с названием сборки
+        bottom_bar = QHBoxLayout()
+        new_build_label = QLabel("Новая сборка: ")  # Текст для названия сборки
+        self.build_name_input = QLineEdit()  # Поле для ввода названия сборки
+        self.build_name_input.setPlaceholderText("Введите название сборки...")
+        bottom_bar.addWidget(new_build_label)
+        bottom_bar.addWidget(self.build_name_input)
+
+        layout.addLayout(bottom_bar)  # Добавляем нижнюю панель в layout
 
         screen.setLayout(layout)
         return screen
+
+    def save_build(self):
+        build_name = self.build_name_input.text()
+
+        # Проверка, чтобы название сборки не было пустым
+        if not build_name.strip():
+            QMessageBox.warning(self, "Ошибка", "Пожалуйста, введите название сборки!")
+            return
+
+        # Сохранение сборки в базу данных как активную
+        try:
+            # Вставляем сборку в таблицу "Сборки"
+            self.cursor.execute(
+                "INSERT INTO \"Сборки\" (\"Название_сборки\", \"Общая_цена\", \"id_пользователя\", \"Статус_сборки\") "
+                "VALUES (%s, %s, %s, %s) RETURNING id",
+                (build_name, self.total_price, 1, 'Активная')  # Пример: id пользователя = 1, статус "Активная"
+            )
+            build_id = self.cursor.fetchone()[0]  # Получаем ID только что вставленной сборки
+            self.db.conn.commit()
+
+            # Сохраняем компоненты для этой сборки в таблицу "Компоненты_сборки"
+            for category, component_price in self.selected_components.items():
+                # Для каждого выбранного компонента сохраняем его в таблице Компоненты_сборки
+                self.cursor.execute(
+                    "INSERT INTO \"Компоненты_сборки\" (\"id_сборки\", \"id_компонента\", \"Количество\") "
+                    "VALUES (%s, (SELECT id FROM \"Компоненты\" WHERE \"Категория\" = %s LIMIT 1), %s)",
+                    (build_id, category, 1)  # Пример: количество каждого компонента = 1
+                )
+            self.db.conn.commit()
+
+            QMessageBox.information(self, "Успех", "Сборка успешно сохранена!")
+        except Exception as e:
+            self.db.conn.rollback()  # Если ошибка, откатываем изменения
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении сборки: {str(e)}")
+
+    def delete_build(self):
+        build_name = self.build_name_input.text()
+
+        # Проверка, чтобы название сборки не было пустым
+        if not build_name.strip():
+            QMessageBox.warning(self, "Ошибка", "Пожалуйста, введите название сборки для удаления!")
+            return
+
+        try:
+            # Получаем id текущего пользователя (например, id пользователя = 1)
+            current_user_id = 1  # Здесь можно заменить на реальный id текущего пользователя
+
+            # Проверка, существует ли сборка с таким названием и принадлежит ли она текущему пользователю
+            self.cursor.execute(
+                "SELECT id, \"id_пользователя\" FROM \"Сборки\" WHERE \"Название_сборки\" = %s AND \"Статус_сборки\" = %s",
+                (build_name, 'Активная')
+            )
+            result = self.cursor.fetchone()
+
+            if result:
+                build_id, owner_id = result  # Получаем id сборки и id владельца
+
+                if owner_id != current_user_id:
+                    # Если пользователь не является владельцем сборки
+                    QMessageBox.warning(self, "Ошибка", "Вы не можете удалить чужую сборку!")
+                    return
+
+                # Сборка найдена, подтверждаем удаление
+                reply = QMessageBox.question(self, 'Подтвердите удаление',
+                                             f"Вы действительно хотите удалить сборку '{build_name}'?",
+                                             QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+
+                if reply == QMessageBox.Yes:
+                    # Удаляем все компоненты этой сборки
+                    self.cursor.execute(
+                        "DELETE FROM \"Компоненты_сборки\" WHERE \"id_сборки\" = %s", (build_id,)
+                    )
+                    # Удаляем саму сборку
+                    self.cursor.execute(
+                        "DELETE FROM \"Сборки\" WHERE id = %s", (build_id,)
+                    )
+                    self.db.conn.commit()
+                    QMessageBox.information(self, "Удаление", f"Сборка '{build_name}' успешно удалена.")
+                    self.central_widget.setCurrentWidget(self.main_menu)  # Перенаправление на главный экран
+            else:
+                # Сборка с таким названием не найдена или не активна
+                QMessageBox.warning(self, "Ошибка", "Сборка с таким названием не найдена или не активна.")
+        except Exception as e:
+            self.db.conn.rollback()  # Если ошибка, откатываем изменения
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при удалении сборки: {str(e)}")
 
     def select_component(self, item):
         try:
@@ -312,7 +474,75 @@ class MainWindow(QMainWindow):
 
         screen.setLayout(layout)
         return screen
+class AuthWindow(QWidget):
+    def __init__(self, parent, mode="login"):
+        super().__init__()
+        self.parent = parent
+        self.mode = mode
+        self.setWindowTitle("Регистрация" if mode == "register" else "Вход")
 
+        # Интерфейс окна
+        layout = QVBoxLayout()
+
+        self.info_label = QLabel("Введите логин и пароль")
+        layout.addWidget(self.info_label)
+
+        self.username_input = QLineEdit()
+        self.username_input.setPlaceholderText("Логин")
+        layout.addWidget(self.username_input)
+
+        self.password_input = QLineEdit()
+        self.password_input.setPlaceholderText("Пароль")
+        self.password_input.setEchoMode(QLineEdit.Password)
+        layout.addWidget(self.password_input)
+
+        self.submit_button = QPushButton("Зарегистрироваться" if mode == "register" else "Войти")
+        self.submit_button.clicked.connect(self.handle_auth)
+        layout.addWidget(self.submit_button)
+
+        self.setLayout(layout)
+
+    import bcrypt
+
+    def handle_auth(self):
+        username = self.username_input.text()
+        password = self.password_input.text()
+
+        if not username or not password:
+            QMessageBox.warning(self, "Ошибка", "Пожалуйста, введите логин и пароль")
+            return
+
+        try:
+            if self.mode == "register":
+                # Регистрация пользователя в PostgreSQL
+                hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())  # Хешируем пароль
+                self.parent.cursor.execute(
+                    "INSERT INTO Пользователи (Никнейм, Пароль, Дата_регистрации) VALUES (%s, %s, CURRENT_DATE)",
+                    (username, hashed_password.decode('utf-8'))
+                )
+                self.parent.db.conn.commit()
+                QMessageBox.information(self, "Успех", "Регистрация прошла успешно!")
+                self.close()
+            elif self.mode == "login":
+                # Проверка пользователя
+                self.parent.cursor.execute(
+                    "SELECT Пароль FROM Пользователи WHERE Никнейм = %s", (username,)
+                )
+                result = self.parent.cursor.fetchone()
+
+                if result:
+                    stored_password = result[0]  # Пароль из базы данных
+                    # Проверяем введённый пароль с хешированным
+                    if bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
+                        QMessageBox.information(self, "Успех", "Вы успешно вошли в профиль")
+                        self.parent.login_user(username)
+                        self.close()
+                    else:
+                        QMessageBox.warning(self, "Ошибка", "Неправильный логин или пароль")
+                else:
+                    QMessageBox.warning(self, "Ошибка", "Пользователь с таким логином не найден")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Произошла ошибка: {e}")
 
 class Database:
     def __init__(self):
