@@ -22,10 +22,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QIcon
 from datetime import datetime
 
-# Загружаем переменные окружения из .env файла
 load_dotenv()
 
-# Конфигурация базы данных из .env файла
 DB_CONFIG = {
     'dbname': os.getenv('DB_NAME'),
     'user': os.getenv('DB_USER'),
@@ -33,7 +31,7 @@ DB_CONFIG = {
     'host': os.getenv('DB_HOST'),
     'port': os.getenv('DB_PORT')
 }
-# Функция для добавления компонентов в базу данных
+
 def add_component_to_db(category, name, price, description):
     try:
         conn = psycopg2.connect(**DB_CONFIG)
@@ -102,9 +100,12 @@ class MainWindow(QMainWindow):
         screen = QWidget()
         layout = QVBoxLayout()
 
-        # Верхняя панель с кнопкой "Назад"
         top_bar = QHBoxLayout()
-        back_button = QPushButton("Назад")
+        back_button = QPushButton()
+        back_button.setIcon(QIcon("back.png"))
+        back_button.setFixedSize(50, 50)
+        back_button.clicked.connect(self.show_main_menu_screen)
+        layout.addWidget(back_button)
         back_button.clicked.connect(self.show_main_menu_screen)  # Переход в главное меню
         top_bar.addWidget(back_button)
 
@@ -144,10 +145,10 @@ class MainWindow(QMainWindow):
         return self.username is not None
 
     def get_user_id(self):
-        if not self.is_user_logged_in():
+        if not self.username:
+            print("Пользователь не авторизован: self.username = None")
             return None
-
-        self.cursor.execute("SELECT id FROM Пользователи WHERE Никнейм = %s", (self.username,))
+        self.cursor.execute("SELECT id_Пользователя FROM Пользователи WHERE Никнейм = %s", (self.username,))
         result = self.cursor.fetchone()
         if result:
             return result[0]
@@ -252,7 +253,8 @@ class MainWindow(QMainWindow):
 
         # Верхняя панель
         top_bar = QHBoxLayout()
-        back_btn = QPushButton("Назад")
+        back_btn = QPushButton()
+        back_btn.setIcon(QIcon("back.png"))
         back_btn.setFixedSize(60, 40)
         back_btn.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.main_menu))
 
@@ -262,8 +264,10 @@ class MainWindow(QMainWindow):
         save_btn.clicked.connect(self.save_build)  # Обработчик для кнопки "Сохранить"
         delete_btn = QPushButton("Удалить")
         delete_btn.clicked.connect(self.delete_build)  # Обработчик для кнопки "Удалить"
-        profile_btn = QPushButton("Профиль")
-        profile_btn.setFixedSize(100, 40)
+        profile_btn = QPushButton()
+        profile_btn.setIcon(QIcon("man.png"))  # Указываем путь к картинке
+        profile_btn.setIconSize(profile_btn.sizeHint())
+        profile_btn.setFixedSize(50, 50)
         profile_btn.clicked.connect(self.show_profile_screen)  # Добавлен обработчик для кнопки Профиль
 
         top_bar.addWidget(back_btn)
@@ -488,8 +492,10 @@ class MainWindow(QMainWindow):
 
         self.active_builds_list = QListWidget()
         layout.addWidget(self.active_builds_list)
-        
-        back_button = QPushButton("Назад")
+
+        back_button = QPushButton()
+        back_button.setIcon(QIcon("back.png"))  # Указываем путь к картинке
+        back_button.setFixedSize(50, 50)
         back_button.clicked.connect(self.show_main_menu_screen)
         layout.addWidget(back_button)
 
@@ -504,25 +510,36 @@ class MainWindow(QMainWindow):
             # Очищаем список перед обновлением
             self.active_builds_list.clear()
 
-            # Получаем активные сборки из базы данных
-            self.cursor.execute("""
-                SELECT id, Название_сборки, Общая_цена 
-                FROM "Сборки" 
-                WHERE Статус_сборки = 'Активная' AND id_пользователя = %s
-            """, (self.get_user_id(),))
+            # Проверка авторизации пользователя
+            user_id = self.get_user_id()
+            print(f"Проверяем ID пользователя: {user_id}")
             builds = self.cursor.fetchall()
+            print(f"Найдено сборок: {len(builds)}")
 
+            if user_id is None:
+                QMessageBox.warning(self, "Ошибка", "Вы должны войти в профиль, чтобы видеть активные сборки!")
+                return
+
+            # Выполняем запрос для получения активных сборок
+            print(f"Выполняем запрос для получения активных сборок для пользователя с ID {user_id}...")
+            self.cursor.execute("""
+                SELECT id_Пользователя, Название_сборки, Общая_цена 
+                FROM "Сборки" 
+                WHERE Статус_сборки = 'Активная' AND id_Пользователя = %s
+            """, (user_id,))
+            builds = self.cursor.fetchall()
+            print(f"Найдено сборок: {len(builds)}")
+
+            # Если сборок нет
             if not builds:
                 self.active_builds_list.addItem("У вас нет активных сборок.")
             else:
-                for build in builds:
-                    build_id, build_name, total_price = build
+                for build_name, total_price in builds:
                     item_text = f"{build_name} — {total_price} руб."
                     item = QListWidgetItem(item_text)
-                    item.setData(1, build_id)  # Сохраняем ID сборки
                     self.active_builds_list.addItem(item)
-
         except Exception as e:
+            print(f"Ошибка при загрузке активных сборок: {e}")
             QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить сборки: {e}")
 
 
@@ -590,47 +607,56 @@ class AuthWindow(QWidget):
 
         self.setLayout(layout)
 
-    import bcrypt
+    def login(self, username, password):
+        # Пример логики аутентификации
+        self.cursor.execute(
+            "SELECT id_Пользователя FROM Пользователи WHERE Никнейм = %s AND Пароль = %s",
+            (username, password),
+        )
+        result = self.cursor.fetchone()
+        if result:
+            self.username = username  # Устанавливаем текущего пользователя
+            return True
+        else:
+            return False
+
+    def get_user_id(self):
+        if not self.username:
+            return None
+        self.cursor.execute("SELECT id_Пользователя FROM Пользователи WHERE Никнейм = %s", (self.username,))
+        result = self.cursor.fetchone()
+        return result[0] if result else None
 
     def handle_auth(self):
-        username = self.username_input.text()
-        password = self.password_input.text()
+        username = self.username_input.text().strip()
+        password = self.password_input.text().strip()
 
         if not username or not password:
             QMessageBox.warning(self, "Ошибка", "Пожалуйста, введите логин и пароль")
             return
 
         try:
-            if self.mode == "register":
-                # Регистрация пользователя в PostgreSQL
-                hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())  # Хешируем пароль
-                self.parent.cursor.execute(
-                    "INSERT INTO Пользователи (Никнейм, Пароль, Дата_регистрации) VALUES (%s, %s, CURRENT_DATE)",
-                    (username, hashed_password.decode('utf-8'))
-                )
-                self.parent.db.conn.commit()
-                QMessageBox.information(self, "Успех", "Регистрация прошла успешно!")
-                self.close()
-            elif self.mode == "login":
-                # Проверка пользователя
-                self.parent.cursor.execute(
-                    "SELECT Пароль FROM Пользователи WHERE Никнейм = %s", (username,)
-                )
-                result = self.parent.cursor.fetchone()
+            print(f"Попытка входа для пользователя: {username}")
+            self.parent.cursor.execute(
+                "SELECT Пароль FROM Пользователи WHERE Никнейм = %s", (username,)
+            )
+            result = self.parent.cursor.fetchone()
+            print(f"Результат запроса пароля: {result}")
 
-                if result:
-                    stored_password = result[0]  # Пароль из базы данных
-                    # Проверяем введённый пароль с хешированным
-                    if bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
-                        QMessageBox.information(self, "Успех", "Вы успешно вошли в профиль")
-                        self.parent.login_user(username)
-                        self.close()
-                    else:
-                        QMessageBox.warning(self, "Ошибка", "Неправильный логин или пароль")
+            if result:
+                stored_password = result[0]
+                if bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
+                    QMessageBox.information(self, "Успех", "Вы успешно вошли в профиль")
+                    self.parent.login_user(username)  # Передача имени пользователя в MainWindow
+                    self.close()
                 else:
-                    QMessageBox.warning(self, "Ошибка", "Пользователь с таким логином не найден")
+                    QMessageBox.warning(self, "Ошибка", "Неправильный логин или пароль")
+            else:
+                QMessageBox.warning(self, "Ошибка", "Пользователь с таким логином не найден")
         except Exception as e:
+            print(f"Ошибка входа: {e}")
             QMessageBox.critical(self, "Ошибка", f"Произошла ошибка: {e}")
+
 
 class Database:
     def __init__(self):
