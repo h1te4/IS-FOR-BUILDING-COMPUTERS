@@ -50,6 +50,15 @@ def add_component_to_db(category, name, price, description):
     except Exception as e:
         print(f"Ошибка добавления компонента: {e}")
 
+def create_profile_button(self):
+    profile_button = QPushButton()
+    profile_button.setIcon(QIcon("man.png"))
+    profile_button.setFixedSize(50, 50)   # Размер кнопки
+    profile_button.setStyleSheet("border: none;")  # Убираем рамку вокруг кнопки
+    profile_button.clicked.connect(self.show_profile_screen)  # Переход в профиль
+    return profile_button
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -94,6 +103,25 @@ class MainWindow(QMainWindow):
         self.central_widget.addWidget(self.active_builds_screen)
 
         self.central_widget.setCurrentWidget(self.main_menu)
+
+        # Добавляем кнопку профиля
+        self.add_profile_button()
+
+    def create_profile_button(self):
+        # Создаем кнопку с картинкой для профиля
+        profile_button = QPushButton()
+        profile_button.setIcon(QIcon("man.png"))
+        profile_button.setFixedSize(50, 50) # Размер кнопки
+        profile_button.setStyleSheet("border: none;")  # Убираем рамку вокруг кнопки
+        profile_button.clicked.connect(self.show_profile_screen)  # Переход в профиль
+        return profile_button
+
+    def add_profile_button(self):
+        # Создаем макет для кнопки профиля
+        top_layout = QHBoxLayout()
+        profile_button = self.create_profile_button()  # Получаем кнопку профиля
+        top_layout.addWidget(profile_button)
+        top_layout.addStretch()  # Добавляем отступ справа
 
     def create_profile_screen(self):
         screen = QWidget()
@@ -182,6 +210,7 @@ class MainWindow(QMainWindow):
         self.username = username
         self.registration_date = self.get_registration_date(username)
         self.refresh_profile_screen()
+        self.show_active_builds()
 
     # Получение даты регистрации
     def get_registration_date(self, username):
