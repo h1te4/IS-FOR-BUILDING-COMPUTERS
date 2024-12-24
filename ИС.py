@@ -18,7 +18,9 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QListWidget,
-    QListWidgetItem
+    QListWidgetItem,
+    QComboBox,
+    QFormLayout
 )
 from PyQt5.QtGui import QIcon
 from datetime import datetime
@@ -122,6 +124,9 @@ class MainWindow(QMainWindow):
         self.central_widget.addWidget(self.active_builds_screen)
 
         self.central_widget.setCurrentWidget(self.main_menu)
+        # Экран завершённых сборок
+        self.finished_builds_screen = self.create_finished_builds_screen()
+        self.central_widget.addWidget(self.finished_builds_screen)
 
         # Добавляем кнопку профиля
         self.add_profile_button()
@@ -282,7 +287,7 @@ class MainWindow(QMainWindow):
             lambda: self.central_widget.setCurrentWidget(self.active_builds_screen))
 
         btn_finished_builds = QPushButton("Завершённые сборки")
-        btn_finished_builds.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.finished_builds_screen))
+        btn_finished_builds.clicked.connect(lambda: [self.show_finished_builds(), self.central_widget.setCurrentWidget(self.finished_builds_screen)])
 
         # Добавляет кнопки в макет
         for btn in [btn_new_build, btn_components, btn_active_builds, btn_finished_builds]:
@@ -290,6 +295,23 @@ class MainWindow(QMainWindow):
             buttons_layout.addWidget(btn)
 
         layout.addLayout(buttons_layout)
+        screen.setLayout(layout)
+        return screen
+
+    def create_finished_builds_screen(self):
+        """Создание экрана завершённых сборок"""
+        screen = QWidget()
+        layout = QVBoxLayout()
+
+        self.finished_builds_list = QListWidget()
+        layout.addWidget(self.finished_builds_list)
+
+        back_button = QPushButton()
+        back_button.setIcon(QIcon("back.png"))
+        back_button.setFixedSize(50, 50)
+        back_button.clicked.connect(self.show_main_menu_screen)
+        layout.addWidget(back_button)
+
         screen.setLayout(layout)
         return screen
 
@@ -443,20 +465,37 @@ class MainWindow(QMainWindow):
             self.db.conn.rollback()  # Откатываем изменения в случае ошибки
             QMessageBox.critical(self, "Ошибка", f"Ошибка при удалении сборки: {e}")
 
-    def finish_build(self, build_id):
-        """Перенос сборки в завершенные."""
+    def show_finished_builds(self):
+        """Отображение завершённых сборок"""
         try:
+            # Очищаем список перед загрузкой
+            self.finished_builds_list.clear()
+
+            # Получаем ID текущего пользователя
+            user_id = self.get_user_id()
+            if user_id is None:
+                QMessageBox.warning(self, "Ошибка", "Вы должны войти в профиль, чтобы видеть завершённые сборки!")
+                return
+
+            # Выполняем запрос к базе данных для получения завершённых сборок
             self.cursor.execute("""
-                UPDATE "Сборки" 
-                SET "Статус_сборки" = 'Завершенная' 
-                WHERE "id_сборки" = %s
-            """, (build_id,))
-            self.db.conn.commit()
-            QMessageBox.information(self, "Успех", "Сборка перенесена в завершенные.")
-            self.show_active_builds()  # Перезагружает список
+                SELECT "Название_сборки", "Общая_цена"
+                FROM "Сборки"
+                WHERE "Статус_сборки" = 'Завершенная' AND "id_Пользователя" = %s
+            """, (user_id,))
+            builds = self.cursor.fetchall()
+
+            # Если сборок нет, отображаем сообщение
+            if not builds:
+                self.finished_builds_list.addItem("У вас нет завершённых сборок.")
+                return
+
+            # Добавляем завершённые сборки в список
+            for build_name, total_price in builds:
+                self.finished_builds_list.addItem(f"{build_name} — {total_price} руб.")
+
         except Exception as e:
-            self.db.conn.rollback()  # Откатываем изменения в случае ошибки
-            QMessageBox.critical(self, "Ошибка", f"Ошибка при завершении сборки: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить завершённые сборки: {e}")
 
     def edit_build(self, build_id):
         """Редактирование сборки."""
@@ -595,12 +634,155 @@ class MainWindow(QMainWindow):
         screen = QWidget()
         layout = QVBoxLayout()
 
+        # Кнопка "Добавить"
+        add_button = QPushButton("Добавить")
+        add_button.setFixedHeight(50)
+        add_button.clicked.connect(self.show_add_component_screen)  # Открыть окно добавления
+        layout.addWidget(add_button)
+
         self.components_list = QListWidget()
         self.load_and_display_all_components()
         layout.addWidget(self.components_list)
 
         screen.setLayout(layout)
         return screen
+
+    def show_add_component_screen(self):
+        try:
+            print("Переход на экран добавления комплектующих")  # Отладка
+            self.add_component_screen = self.create_add_component_screen()
+            self.central_widget.addWidget(self.add_component_screen)
+            self.central_widget.setCurrentWidget(self.add_component_screen)
+            print("Экран добавления комплектующих успешно открыт")  # Отладка
+        except Exception as e:
+            print(f"Ошибка в show_add_component_screen: {e}")  # Отладка ошибки
+
+    def create_add_component_screen(self):
+        """Создание экрана добавления комплектующих"""
+        screen = QWidget()
+        layout = QVBoxLayout()
+
+        self.name_input = QLineEdit()  # Вместо локальной переменной
+
+        # Верхняя панель с кнопкой "Назад"
+        top_bar = QHBoxLayout()
+        back_button = QPushButton()
+        back_button.setIcon(QIcon("back.png"))
+        back_button.setFixedSize(50, 50)
+        back_button.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.components_screen))
+        top_bar.addWidget(back_button)
+
+        title_label = QLabel("Добавление комплектующих")
+        title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
+        top_bar.addWidget(title_label)
+        top_bar.addStretch()
+        layout.addLayout(top_bar)
+
+        # Выбор категории
+        category_label = QLabel("Выберите категорию:")
+        self.category_combo = QComboBox()
+        self.category_combo.addItems([
+            "Видеокарта", "Процессор", "Материнская плата", "Корпус",
+            "Охлаждение процессора", "Оперативная память", "Накопитель",
+            "Блок питания", "Доп. детали"
+        ])
+        self.category_combo.currentTextChanged.connect(self.update_form_fields)
+        layout.addWidget(category_label)
+        layout.addWidget(self.category_combo)
+
+        # Форма для ввода данных
+        self.form_layout = QFormLayout()
+        layout.addLayout(self.form_layout)
+        self.update_form_fields("Видеокарта")  # Устанавливаем поля по умолчанию
+
+        # Кнопка "Сохранить"
+        save_button = QPushButton("Сохранить")
+        save_button.clicked.connect(self.save_component)
+        layout.addWidget(save_button)
+
+        screen.setLayout(layout)
+        return screen
+
+    def update_form_fields(self, category):
+        """Обновление полей формы в зависимости от выбранной категории"""
+        # Очистить текущие поля
+        while self.form_layout.count():
+            child = self.form_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        # Общие поля
+        self.name_input = QLineEdit()
+        self.description_input = QLineEdit()
+        self.price_input = QLineEdit()
+        self.form_layout.addRow("Название:", self.name_input)
+        self.form_layout.addRow("Описание:", self.description_input)
+
+        # Уникальные поля для каждой категории
+        if category == "Процессор" or category == "Материнская плата":
+            self.socket_input = QLineEdit()
+            self.form_layout.addRow("Сокет:", self.socket_input)
+        if category == "Накопитель":
+            self.capacity_input = QLineEdit()
+            self.form_layout.addRow("Объём:", self.capacity_input)
+        if category == "Блок питания":
+            self.power_input = QLineEdit()
+            self.form_layout.addRow("Мощность:", self.power_input)
+
+        # Поле "Цена" для всех категорий
+        self.form_layout.addRow("Цена:", self.price_input)
+
+    def save_component(self):
+        """Сохранение нового компонента в базу данных"""
+        try:
+            # Получаем данные из формы
+            category = self.category_combo.currentText()
+            name = self.name_input.text()
+            description = self.description_input.text()
+            price = Decimal(self.price_input.text())
+
+            # Уникальные поля
+            socket = self.socket_input.text() if hasattr(self, "socket_input") else None
+            capacity = self.capacity_input.text() if hasattr(self, "capacity_input") else None
+            power = self.power_input.text() if hasattr(self, "power_input") else None
+
+            # Определяем таблицу
+            table_mapping = {
+                "Видеокарта": "Видеокарты",
+                "Процессор": "Процессоры",
+                "Материнская плата": "Материнская плата",
+                "Корпус": "Корпус",
+                "Охлаждение процессора": "Охлаждение процессора",
+                "Оперативная память": "Оперативная память",
+                "Накопитель": "Накопители",
+                "Блок питания": "Блоки_питания",
+                "Доп. детали": "Доп детали"
+            }
+            table_name = table_mapping.get(category)
+
+            # Формируем SQL-запрос
+            query = f"""
+                INSERT INTO "{table_name}" ("Название", "Описание", {f'"Сокет", ' if socket else ''}{f'"Объём", ' if capacity else ''}{f'"Мощность", ' if power else ''}"Цена")
+                VALUES (%s, %s, {f'%s, ' if socket else ''}{f'%s, ' if capacity else ''}{f'%s, ' if power else ''}%s)
+            """
+            values = [name, description]
+            if socket:
+                values.append(socket)
+            if capacity:
+                values.append(capacity)
+            if power:
+                values.append(power)
+            values.append(price)
+
+            # Выполняем запрос
+            self.cursor.execute(query, values)
+            self.db.conn.commit()
+
+            QMessageBox.information(self, "Успех", f"{category} добавлена в базу данных!")
+            self.central_widget.setCurrentWidget(self.components_screen)  # Возврат на экран "Склад комплектующих"
+            self.load_and_display_all_components()  # Обновляем список компонентов
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при добавлении компонента: {e}")
 
     def load_and_display_all_components(self):
         """Загрузка всех компонентов из всех категорий для отображения"""
@@ -711,8 +893,9 @@ class MainWindow(QMainWindow):
 
                 # Кнопка "Завершить"
                 complete_button = QPushButton("Завершить")
-                complete_button.setFixedSize(100, 30)
                 complete_button.clicked.connect(lambda _, b_id=build_id: self.finish_build(b_id))
+                complete_button.setFixedSize(100, 30)
+
   # Привязываем к методу
                 row_layout.addWidget(complete_button)
 
