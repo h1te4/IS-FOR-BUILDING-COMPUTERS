@@ -2,6 +2,7 @@ import sys
 import psycopg2
 import bcrypt
 import os
+from decimal import Decimal
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -37,16 +38,34 @@ def add_component_to_db(category, name, price, description):
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor()
 
-        query = """
-            INSERT INTO Компоненты (Категория, Название, Цена, Описание)
-            VALUES (%s, %s, %s, %s)
+        # Определяем таблицу на основе категории
+        table_mapping = {
+            "Видеокарта": "Видеокарты",
+            "Процессор": "Процессоры",
+            "Материнская плата": "Материнская плата",
+            "Корпус": "Корпус",
+            "Охлаждение процессора": "Охлаждение процессора",
+            "Оперативная память": "Оперативная память",
+            "Накопитель": "Накопители",
+            "Блок питания": "Блоки_питания",
+            "Доп. детали": "Доп детали"
+        }
+
+        table_name = table_mapping.get(category)
+        if not table_name:
+            raise ValueError(f"Категория '{category}' не поддерживается.")
+
+        # Формируем запрос
+        query = f"""
+            INSERT INTO "{table_name}" ("Название", "Цена", "Описание")
+            VALUES (%s, %s, %s)
         """
-        cursor.execute(query, (category, name, price, description))
+        cursor.execute(query, (name, price, description))
         conn.commit()
 
         cursor.close()
         conn.close()
-        print(f"{category} '{name}' добавлен в базу данных.")
+        print(f"{category} '{name}' добавлен в таблицу '{table_name}'.")
     except Exception as e:
         print(f"Ошибка добавления компонента: {e}")
 
@@ -124,46 +143,46 @@ class MainWindow(QMainWindow):
         top_layout.addStretch()  # Добавляем отступ справа
 
     def create_profile_screen(self):
+        """Создание экрана профиля."""
         screen = QWidget()
         layout = QVBoxLayout()
 
+        # Верхняя панель с кнопкой назад
         top_bar = QHBoxLayout()
         back_button = QPushButton()
         back_button.setIcon(QIcon("back.png"))
         back_button.setFixedSize(50, 50)
-        back_button.clicked.connect(self.show_main_menu_screen)
-        layout.addWidget(back_button)
         back_button.clicked.connect(self.show_main_menu_screen)  # Переход в главное меню
         top_bar.addWidget(back_button)
+        top_bar.addStretch()  # Отодвигает элементы вправо
+        layout.addLayout(top_bar)
 
-        top_bar.addStretch()  # Раздвигает элементы вправо, оставляя кнопку слева
-
-        layout.addLayout(top_bar)  # Добавляет верхнюю панель в layout
-
+        # Проверяем, авторизован ли пользователь
         if self.is_user_logged_in():
-            # Если пользователь авторизован
-            self.profile_info_label = QLabel(f"Никнейм: {self.username}\nДата регистрации: {self.registration_date}")
-            layout.addWidget(self.profile_info_label)
+            # Информация о пользователе
+            profile_info = QLabel(f"Никнейм: {self.username}\nДата регистрации: {self.registration_date}")
+            layout.addWidget(profile_info)
 
             # Кнопка выхода
             logout_button = QPushButton("Выход")
-            logout_button.clicked.connect(self.logout)
+            logout_button.clicked.connect(self.logout)  # Выход из профиля
             layout.addWidget(logout_button)
         else:
-            # Если пользователь не авторизован
-            self.profile_info_label = QLabel("Вы не вошли в профиль")
-            layout.addWidget(self.profile_info_label)
+            # Сообщение для неавторизованных пользователей
+            profile_info = QLabel("Вы не вошли в профиль")
+            layout.addWidget(profile_info)
 
             # Кнопка регистрации
             register_button = QPushButton("Регистрация")
-            register_button.clicked.connect(self.open_registration_window)
+            register_button.clicked.connect(self.open_registration_window)  # Открытие окна регистрации
             layout.addWidget(register_button)
 
             # Кнопка входа
             login_button = QPushButton("Вход")
-            login_button.clicked.connect(self.open_login_window)
+            login_button.clicked.connect(self.open_login_window)  # Открытие окна входа
             layout.addWidget(login_button)
 
+        # Устанавливаем layout для экрана
         screen.setLayout(layout)
         return screen
 
@@ -274,8 +293,10 @@ class MainWindow(QMainWindow):
         screen.setLayout(layout)
         return screen
 
-    def create_new_build_screen(self):
-        """Создание экрана новой сборки"""
+    def create_new_build_screen(self, mode="new", build_name="", total_price=0):
+        """Создание экрана сборки (новой или для редактирования)."""
+        print(f"Создаём экран сборки. Режим: {mode}, Название: {build_name}, Цена: {total_price}")  # Отладка
+
         screen = QWidget()
         layout = QVBoxLayout()
 
@@ -286,12 +307,15 @@ class MainWindow(QMainWindow):
         back_btn.setFixedSize(60, 40)
         back_btn.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.main_menu))
 
-        title_label = QLabel("Новая сборка")
+        # Устанавливаем заголовок окна в зависимости от режима
+        title_label = QLabel("Редактирование сборки" if mode == "edit" else "Новая сборка")
         title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
         save_btn = QPushButton("Сохранить")
         save_btn.clicked.connect(self.save_build)  # Обработчик для кнопки "Сохранить"
+
         delete_btn = QPushButton("Удалить")
         delete_btn.clicked.connect(self.delete_build)  # Обработчик для кнопки "Удалить"
+
         profile_btn = QPushButton()
         profile_btn.setIcon(QIcon("man.png"))
         profile_btn.setIconSize(profile_btn.sizeHint())
@@ -301,7 +325,8 @@ class MainWindow(QMainWindow):
         top_bar.addWidget(back_btn)
         top_bar.addWidget(title_label)
         top_bar.addStretch()
-        top_bar.addWidget(delete_btn)
+        if mode == "edit":  # Кнопка "Удалить" только в режиме редактирования
+            top_bar.addWidget(delete_btn)
         top_bar.addWidget(save_btn)
         top_bar.addWidget(profile_btn)
 
@@ -332,18 +357,20 @@ class MainWindow(QMainWindow):
         layout.addLayout(top_bar)
         layout.addLayout(components_layout)
 
-        # Список компонентов для новой сборки
+        # Список компонентов для сборки
         self.new_build_list = QListWidget()
         self.new_build_list.itemDoubleClicked.connect(self.select_component)  # Обработчик двойного клика
         layout.addWidget(self.new_build_list)
 
         # Метка для отображения цены сборки
-        self.build_price_label = QLabel("Цена: 0 руб.")
+        self.build_price_label = QLabel(f"Цена: {total_price} руб.")  # Устанавливаем общую цену
         layout.addWidget(self.build_price_label)
+
         # Нижняя панель с названием сборки
         bottom_bar = QHBoxLayout()
-        new_build_label = QLabel("Новая сборка: ")  # Текст для названия сборки
-        self.build_name_input = QLineEdit()  # Поле для ввода названия сборки
+        new_build_label = QLabel("Название сборки: ")
+        self.build_name_input = QLineEdit(
+            build_name)  # Поле для ввода названия сборки (предзаполняем для редактирования)
         self.build_name_input.setPlaceholderText("Введите название сборки...")
         bottom_bar.addWidget(new_build_label)
         bottom_bar.addWidget(self.build_name_input)
@@ -354,6 +381,7 @@ class MainWindow(QMainWindow):
         return screen
 
     def save_build(self):
+        """Сохранение сборки в базу данных."""
         # Проверка, авторизован ли пользователь
         if not self.is_user_logged_in():
             QMessageBox.warning(self, "Ошибка", "Вы должны войти в профиль, чтобы сохранить сборку!")
@@ -369,21 +397,26 @@ class MainWindow(QMainWindow):
         try:
             # Вставляем сборку в таблицу "Сборки"
             self.cursor.execute(
-                "INSERT INTO \"Сборки\" (\"Название_сборки\", \"Общая_цена\", \"id_Пользователя\", \"Статус_сборки\") "
-                "VALUES (%s, %s, %s, %s) RETURNING \"id_сборки\"",
+                """
+                INSERT INTO "Сборки" ("Название_сборки", "Общая_цена", "id_Пользователя", "Статус_сборки") 
+                VALUES (%s, %s, %s, %s) RETURNING "id_сборки"
+                """,
                 (build_name, self.total_price, self.get_user_id(), 'Активная')
             )
             build_id = self.cursor.fetchone()[0]  # Получаем id_сборки
             print(f"ID новой сборки: {build_id}")  # Отладка
 
             # Сохраняем компоненты для этой сборки в таблицу "Компоненты_сборки"
-            for category, component_price in self.selected_components.items():
-                print(f"Добавляем компонент для сборки {build_id}, категория: {category}")  # Отладка
-                self.cursor.execute(
-                    "INSERT INTO \"Компоненты_сборки\" (\"id_сборки\", \"id_компонента\", \"Количество\") "
-                    "VALUES (%s, (SELECT id FROM \"Компоненты\" WHERE \"Категория\" = %s LIMIT 1), %s)",
-                    (build_id, category, 1)
-                )
+            for category, component_name in self.selected_components.items():
+                print(
+                    f"Добавляем компонент для сборки {build_id}, категория: {category}, компонент: {component_name}")  # Отладка
+
+                # Заполняем таблицу "Компоненты_сборки"
+                query = f"""
+                UPDATE "Компоненты_сборки" SET "{category}" = %s WHERE "id_сборки" = %s
+                """
+                self.cursor.execute(query, (component_name, build_id))
+
             self.db.conn.commit()
             self.show_active_builds()  # Обновляем окно активных сборок
             QMessageBox.information(self, "Успех", "Сборка успешно сохранена!")
@@ -393,44 +426,65 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении сборки: {e}")
 
     def delete_build(self, build_id):
+        """Удаление сборки из базы данных."""
         try:
-            self.cursor.execute("DELETE FROM \"Сборки\" WHERE id = %s", (build_id,))
+            # Удаляем сборку по ID
+            self.cursor.execute(
+                """
+                DELETE FROM "Сборки" 
+                WHERE "id_сборки" = %s
+                """,
+                (build_id,)
+            )
             self.db.conn.commit()
-            QMessageBox.information(self, "Успех", "Сборка удалена.")
-            self.show_active_builds()  # Перезагружает список
+            QMessageBox.information(self, "Успех", "Сборка успешно удалена.")
+            self.show_active_builds()  # Перезагружает список активных сборок
         except Exception as e:
+            self.db.conn.rollback()  # Откатываем изменения в случае ошибки
             QMessageBox.critical(self, "Ошибка", f"Ошибка при удалении сборки: {e}")
 
     def finish_build(self, build_id):
+        """Перенос сборки в завершенные."""
         try:
             self.cursor.execute("""
                 UPDATE "Сборки" 
-                SET Статус_сборки = 'Завершенная' 
-                WHERE id = %s
+                SET "Статус_сборки" = 'Завершенная' 
+                WHERE "id_сборки" = %s
             """, (build_id,))
             self.db.conn.commit()
             QMessageBox.information(self, "Успех", "Сборка перенесена в завершенные.")
             self.show_active_builds()  # Перезагружает список
         except Exception as e:
+            self.db.conn.rollback()  # Откатываем изменения в случае ошибки
             QMessageBox.critical(self, "Ошибка", f"Ошибка при завершении сборки: {e}")
 
     def edit_build(self, build_id):
+        """Редактирование сборки."""
         try:
-            # Получаем текущие данные сборки
+            print(f"Редактирование сборки с ID {build_id}")  # Отладка
             self.cursor.execute("""
-                SELECT Название_сборки, Общая_цена 
-                FROM "Сборки" 
-                WHERE id = %s
+                SELECT "Название_сборки", "Общая_цена"
+                FROM "Сборки"
+                WHERE "id_сборки" = %s
             """, (build_id,))
             build = self.cursor.fetchone()
 
             if build:
                 build_name, total_price = build
-                self.open_build_editor(build_id, build_name, total_price)
+                print(f"Открываем окно редактирования для сборки: {build_name}, Цена: {total_price}")  # Отладка
+
+                # Открываем экран редактирования сборки
+                self.edit_build_screen = self.create_new_build_screen(
+                    mode="edit",
+                    build_name=build_name,
+                    total_price=total_price
+                )
+                self.central_widget.setCurrentWidget(self.edit_build_screen)  # Переход на экран редактирования
             else:
                 QMessageBox.warning(self, "Ошибка", "Сборка не найдена.")
         except Exception as e:
-            QMessageBox.critical(self, "Ошибка", f"Ошибка при открытии сборки: {e}")
+            print(f"Ошибка при редактировании сборки: {e}")  # Отладка
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при редактировании сборки: {e}")
 
     def open_build_editor(self, build_id, build_name, total_price):
         editor_window = BuildEditor(self, build_id, build_name, total_price)
@@ -465,25 +519,74 @@ class MainWindow(QMainWindow):
         self.build_price_label.setText(f"Цена: {self.total_price} руб.")
 
     def show_components_for_category(self, category):
-        """Отображение компонентов для выбранной категории"""
+        """Отображение компонентов для выбранной категории."""
         self.current_category = category
+
         try:
+            # Проверяем, подключена ли база данных
             if self.db.conn.closed:
-                # Повторное подключение к БД в случае разрыва
-                self.db = Database()
+                self.db = Database()  # Повторное подключение
                 self.cursor = self.db.cursor
 
-            self.cursor.execute("SELECT Категория, Название, Цена, Описание FROM Компоненты WHERE Категория = %s", (category,))
-            components = self.cursor.fetchall()
-            self.new_build_list.clear()  # Очищает список перед добавлением новых элементов
+            # Сопоставление категорий с таблицами
+            table_mapping = {
+                "Видеокарта": "Видеокарты",
+                "Процессор": "Процессоры",
+                "Материнская плата": "Материнская плата",
+                "Корпус": "Корпус",
+                "Охлаждение процессора": "Охлаждение процессора",
+                "Оперативная память": "Оперативная память",
+                "Накопитель": "Накопители",
+                "Блок питания": "Блоки_питания",
+                "Доп. детали": "Доп детали"
+            }
 
-            if not components:
+            # Получаем таблицу для категории
+            table_name = table_mapping.get(category)
+            if not table_name:
+                print(f"Категория '{category}' не найдена в сопоставлении.")
+                self.new_build_list.clear()
+                self.new_build_list.addItem(QListWidgetItem("Категория не найдена."))
+                return
+
+            # Выполняем запрос к нужной таблице
+            query = f"""
+                SELECT "Название", "Цена", "Описание"
+                FROM "{table_name}"
+            """
+            self.cursor.execute(query)
+            components = self.cursor.fetchall()
+
+            # Проверяем, есть ли данные
+            if not components or len(components) == 0:
+                print(f"Нет данных для категории '{category}'.")
+                self.new_build_list.clear()
                 self.new_build_list.addItem(QListWidgetItem("Нет компонентов в этой категории."))
                 return
 
-            for category, name, price, description in components:
-                item_text = f"{category}: {name}\nЦена: {price} руб.\nОписание: {description}"
-                self.new_build_list.addItem(QListWidgetItem(item_text))
+            # Очищаем список и добавляем компоненты
+            self.new_build_list.clear()
+            for component in components:
+                try:
+                    # Проверяем структуру данных
+                    if len(component) != 3:
+                        raise ValueError(f"Некорректные данные компонента: {component}")
+
+                    name, price, description = component
+
+                    # Преобразуем цену из Decimal в float
+                    if not isinstance(price, (int, float, Decimal)):
+                        raise ValueError(f"Неверный тип данных для цены: {price}")
+                    price = float(price)
+
+                    # Формируем текст элемента
+                    item_text = f"{category}: {name}\nЦена: {price} руб.\nОписание: {description}"
+                    self.new_build_list.addItem(QListWidgetItem(item_text))
+
+                except ValueError as ve:
+                    print(f"Пропущен компонент: {ve}")
+
+
         except Exception as e:
             print(f"Ошибка при загрузке компонентов: {e}")
 
@@ -500,16 +603,44 @@ class MainWindow(QMainWindow):
         return screen
 
     def load_and_display_all_components(self):
-        """Загрузка всех компонентов для отображения"""
+        """Загрузка всех компонентов из всех категорий для отображения"""
         try:
-            self.cursor.execute("SELECT Категория, Название, Цена FROM Компоненты")
-            components = self.cursor.fetchall()
+            # Сопоставление категорий с таблицами
+            table_mapping = {
+                "Видеокарты": "Видеокарта",
+                "Процессоры": "Процессор",
+                "Материнская плата": "Материнская плата",
+                "Корпус": "Корпус",
+                "Охлаждение процессора": "Охлаждение процессора",
+                "Оперативная память": "Оперативная память",
+                "Накопители": "Накопитель",
+                "Блоки_питания": "Блок питания",
+                "Доп детали": "Доп. детали"
+            }
 
-            self.components_list.clear()
-            for component in components:
-                item_text = f"{component[0]}: {component[1]}\nЦена: {component[2]} руб."
-                item = QListWidgetItem(item_text)
-                self.components_list.addItem(item)
+            self.components_list.clear()  # Очищаем список перед загрузкой
+
+            for table, category in table_mapping.items():
+                # Запрашиваем данные из каждой таблицы
+                self.cursor.execute(f"""
+                    SELECT "Название", "Цена"
+                    FROM "{table}"
+                """)
+                components = self.cursor.fetchall()
+
+                if not components:  # Проверка, если данных нет
+                    continue
+
+                # Добавляем компоненты в список
+                for component in components:
+                    if len(component) < 2:  # Проверка на корректность данных
+                        print(f"Некорректные данные в таблице {table}: {component}")
+                        continue
+
+                    name, price = component
+                    item_text = f"{category}: {name}\nЦена: {price} руб."
+                    item = QListWidgetItem(item_text)
+                    self.components_list.addItem(item)
         except Exception as e:
             print(f"Ошибка при загрузке компонентов: {e}")
 
@@ -534,6 +665,7 @@ class MainWindow(QMainWindow):
         return screen
 
     def show_active_builds(self):
+        """Отображение активных сборок."""
         try:
             # Очищает список перед обновлением
             self.active_builds_list.clear()
@@ -574,16 +706,20 @@ class MainWindow(QMainWindow):
                 # Кнопка "Редактировать"
                 edit_button = QPushButton("Редактировать")
                 edit_button.setFixedSize(100, 30)
+                edit_button.clicked.connect(lambda _, b_id=build_id: self.edit_build(b_id))  # Привязываем к методу
                 row_layout.addWidget(edit_button)
 
                 # Кнопка "Завершить"
                 complete_button = QPushButton("Завершить")
                 complete_button.setFixedSize(100, 30)
+                complete_button.clicked.connect(lambda _, b_id=build_id: self.finish_build(b_id))
+  # Привязываем к методу
                 row_layout.addWidget(complete_button)
 
                 # Кнопка "Удалить"
                 delete_button = QPushButton("Удалить")
                 delete_button.setFixedSize(100, 30)
+                delete_button.clicked.connect(lambda _, b_id=build_id: self.delete_build(b_id))  # Привязываем к методу
                 row_layout.addWidget(delete_button)
 
                 # Устанавливает макет в виджет
@@ -667,6 +803,57 @@ class AuthWindow(QWidget):
 
         self.setLayout(layout)
 
+    def handle_auth(self):
+        """Обработка входа или регистрации."""
+        username = self.username_input.text().strip()
+        password = self.password_input.text().strip()
+
+        if not username or not password:
+            QMessageBox.warning(self, "Ошибка", "Введите логин и пароль")
+            return
+
+        try:
+            if self.mode == "login":
+                # Проверяем, существует ли пользователь
+                self.parent.cursor.execute("SELECT Пароль FROM Пользователи WHERE Никнейм = %s", (username,))
+                result = self.parent.cursor.fetchone()
+
+                if not result:
+                    QMessageBox.warning(self, "Ошибка", "Пользователь с таким логином не найден")
+                    return
+
+                stored_password = result[0]
+                if bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
+                    QMessageBox.information(self, "Успех", "Вы успешно вошли")
+                    self.parent.login_user(username)  # Логиним пользователя в родительском классе
+                    self.close()
+                else:
+                    QMessageBox.warning(self, "Ошибка", "Неправильный пароль")
+
+            elif self.mode == "register":
+                # Проверяем, существует ли пользователь
+                self.parent.cursor.execute("SELECT 1 FROM Пользователи WHERE Никнейм = %s", (username,))
+                if self.parent.cursor.fetchone():
+                    QMessageBox.warning(self, "Ошибка", "Пользователь с таким никнеймом уже существует")
+                    return
+
+                # Регистрация нового пользователя
+                hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                self.parent.cursor.execute(
+                    "INSERT INTO Пользователи (Никнейм, Пароль, Дата_регистрации) VALUES (%s, %s, CURRENT_DATE)",
+                    (username, hashed_password)
+                )
+                self.parent.db.conn.commit()
+                QMessageBox.information(self, "Успех", "Вы успешно зарегистрировались")
+                self.close()
+
+        except Exception as e:
+            self.parent.db.conn.rollback()
+            print(f"Ошибка: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Произошла ошибка: {e}")
+
+
+
     def login(self, username, password):
         # Пример логики аутентификации
         self.cursor.execute(
@@ -687,35 +874,66 @@ class AuthWindow(QWidget):
         result = self.cursor.fetchone()
         return result[0] if result else None
 
-    def handle_auth(self):
+    def handle_registration(self):
+        """Обработка регистрации пользователя."""
         username = self.username_input.text().strip()
         password = self.password_input.text().strip()
 
         if not username or not password:
-            QMessageBox.warning(self, "Ошибка", "Пожалуйста, введите логин и пароль")
+            QMessageBox.warning(self, "Ошибка", "Введите логин и пароль")
             return
 
         try:
-            print(f"Попытка входа для пользователя: {username}")
-            self.parent.cursor.execute(
-                "SELECT Пароль FROM Пользователи WHERE Никнейм = %s", (username,)
-            )
-            result = self.parent.cursor.fetchone()
-            print(f"Результат запроса пароля: {result}")
+            # Проверяем, существует ли пользователь
+            self.parent.cursor.execute("SELECT 1 FROM Пользователи WHERE Никнейм = %s", (username,))
+            if self.parent.cursor.fetchone():
+                QMessageBox.warning(self, "Ошибка", "Пользователь с таким никнеймом уже существует")
+                return
 
-            if result:
-                stored_password = result[0]
-                if bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
-                    QMessageBox.information(self, "Успех", "Вы успешно вошли в профиль")
-                    self.parent.login_user(username)  # Передача имени пользователя в MainWindow
-                    self.close()
-                else:
-                    QMessageBox.warning(self, "Ошибка", "Неправильный логин или пароль")
-            else:
+            # Регистрируем нового пользователя
+            hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            self.parent.cursor.execute(
+                "INSERT INTO Пользователи (Никнейм, Пароль, Дата_регистрации) VALUES (%s, %s, CURRENT_DATE)",
+                (username, hashed_password)
+            )
+            self.parent.db.conn.commit()
+            QMessageBox.information(self, "Успех", "Вы успешно зарегистрировались")
+            self.close()
+        except Exception as e:
+            self.parent.db.conn.rollback()
+            print(f"Ошибка регистрации: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Ошибка регистрации: {e}")
+
+    def handle_login(self):
+        """Обработка входа пользователя."""
+        username = self.username_input.text().strip()
+        password = self.password_input.text().strip()
+
+        if not username or not password:
+            QMessageBox.warning(self, "Ошибка", "Введите логин и пароль")
+            return
+
+        try:
+            # Проверяем, существует ли пользователь
+            self.parent.cursor.execute("SELECT Пароль FROM Пользователи WHERE Никнейм = %s", (username,))
+            result = self.parent.cursor.fetchone()
+            print(f"Результат проверки пользователя: {result}")  # Отладка
+
+            if not result:
                 QMessageBox.warning(self, "Ошибка", "Пользователь с таким логином не найден")
+                return
+
+            # Проверяем пароль
+            stored_password = result[0]
+            if bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
+                QMessageBox.information(self, "Успех", "Вы успешно вошли")
+                self.parent.login_user(username)  # Передаём имя пользователя в MainWindow
+                self.close()
+            else:
+                QMessageBox.warning(self, "Ошибка", "Неправильный пароль")
         except Exception as e:
             print(f"Ошибка входа: {e}")
-            QMessageBox.critical(self, "Ошибка", f"Произошла ошибка: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при входе: {e}")
 
 
 class Database:
