@@ -89,13 +89,14 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Информационная система для сборки ПК")
         self.setGeometry(100, 100, 800, 600)
 
-        # Инициализация переменной для хранения общей стоимости сборки
+        # Переменная для хранения общей стоимости сборки
         self.total_price = 0
+
         # Начальные значения никнейма и даты регистрации
         self.username = None
         self.registration_date = None
 
-        # Словарь для отслеживания выбранных компонентов и их цен
+        # Словарь для отслеживания выбранных компонентов
         self.selected_components = {}
 
         # Подключение к базе данных через объект Database
@@ -106,33 +107,29 @@ class MainWindow(QMainWindow):
         self.central_widget = QStackedWidget()
         self.setCentralWidget(self.central_widget)
 
-        # Экран профиля
-        self.profile_screen = self.create_profile_screen()
-        self.central_widget.addWidget(self.profile_screen)
+        # Экраны приложения
+        self.main_menu = self.create_main_menu()  # Главный экран
+        self.components_screen = self.create_components_screen()  # Экран склада комплектующих
+        self.profile_screen = self.create_profile_screen()  # Экран профиля
+        self.new_build_screen = self.create_new_build_screen()  # Экран новой сборки
+        self.active_builds_screen = self.create_active_builds_screen()  # Экран активных сборок
+        self.finished_builds_screen = self.create_finished_builds_screen()  # Экран завершённых сборок
 
-        # Главный экран
-        self.main_menu = self.create_main_menu()
+        # Добавляем экраны в стек
         self.central_widget.addWidget(self.main_menu)
-
-        # Экран новой сборки
-        self.new_build_screen = self.create_new_build_screen()
-        self.central_widget.addWidget(self.new_build_screen)
-
-        # Экран склада комплектующих
-        self.components_screen = self.create_components_screen()
         self.central_widget.addWidget(self.components_screen)
-
-        # Экран активных сборок
-        self.active_builds_screen = self.create_active_builds_screen()
+        self.central_widget.addWidget(self.profile_screen)
+        self.central_widget.addWidget(self.new_build_screen)
         self.central_widget.addWidget(self.active_builds_screen)
-
-        self.central_widget.setCurrentWidget(self.main_menu)
-        # Экран завершённых сборок
-        self.finished_builds_screen = self.create_finished_builds_screen()
         self.central_widget.addWidget(self.finished_builds_screen)
 
-        # Добавляем кнопку профиля
-        self.add_profile_button()
+        # Устанавливаем главный экран
+        self.central_widget.setCurrentWidget(self.main_menu)
+
+        # Для добавления компонентов в сборку
+        self.add_to_build_screen = None
+        self.builds_combo_box = None
+
 
     def create_profile_button(self):
         # Создаем кнопку с картинкой для профиля
@@ -160,7 +157,9 @@ class MainWindow(QMainWindow):
         back_button = QPushButton()
         back_button.setIcon(QIcon("back.png"))
         back_button.setFixedSize(50, 50)
-        back_button.clicked.connect(self.show_main_menu_screen)  # Переход в главное меню
+
+        # Подключение кнопки "Назад" к методу переключения на главное меню
+        back_button.clicked.connect(self.show_main_menu_screen)
         top_bar.addWidget(back_button)
         top_bar.addStretch()  # Отодвигает элементы вправо
         layout.addLayout(top_bar)
@@ -359,10 +358,10 @@ class MainWindow(QMainWindow):
 
         # Верхняя панель
         top_bar = QHBoxLayout()
-        back_btn = QPushButton()
-        back_btn.setIcon(QIcon("back.png"))
-        back_btn.setFixedSize(60, 40)
-        back_btn.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.main_menu))
+        back_btnn = QPushButton()
+        back_btnn.setIcon(QIcon("back.png"))
+        back_btnn.setFixedSize(60, 40)
+        back_btnn.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.main_menu))
 
         # Устанавливаем заголовок окна в зависимости от режима
         title_label = QLabel("Редактирование сборки" if mode == "edit" else "Новая сборка")
@@ -379,7 +378,7 @@ class MainWindow(QMainWindow):
         profile_btn.setFixedSize(50, 50)
         profile_btn.clicked.connect(self.show_profile_screen)  # Добавлен обработчик для кнопки Профиль
 
-        top_bar.addWidget(back_btn)
+        top_bar.addWidget(back_btnn)
         top_bar.addWidget(title_label)
         top_bar.addStretch()
         if mode == "edit":  # Кнопка "Удалить" только в режиме редактирования
@@ -923,11 +922,101 @@ class MainWindow(QMainWindow):
                         continue
 
                     name, price = component
-                    item_text = f"{category}: {name}\nЦена: {price} руб."
-                    item = QListWidgetItem(item_text)
+                    item_widget = QWidget()
+                    item_layout = QHBoxLayout()
+                    item_layout.addWidget(QLabel(f"{category}: {name}\nЦена: {price} руб."))
+
+                    # Кнопка "Добавить"
+                    add_button = QPushButton("Добавить")
+                    add_button.clicked.connect(lambda _, n=name, t=table: self.show_add_to_build_screen(n, t))
+                    item_layout.addWidget(add_button)
+
+                    item_widget.setLayout(item_layout)
+                    item = QListWidgetItem()
+                    item.setSizeHint(item_widget.sizeHint())
+
                     self.components_list.addItem(item)
+                    self.components_list.setItemWidget(item, item_widget)
+
         except Exception as e:
             print(f"Ошибка при загрузке компонентов: {e}")
+
+    def show_add_to_build_screen(self, component_name, table_name):
+        """Отображение окна добавления компонента в сборку"""
+        if self.add_to_build_screen is None:  # Проверяем, есть ли уже окно
+            self.add_to_build_screen = QWidget()
+            layout = QVBoxLayout()
+
+            # Верхняя панель с кнопками "Назад" и "Профиль"
+            top_bar = QHBoxLayout()
+
+            # Кнопка "Назад"
+            back_button = QPushButton()
+            back_button.setIcon(QIcon("back.png"))
+            back_button.setFixedSize(50, 50)
+            back_button.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.components_screen))
+            top_bar.addWidget(back_button)
+
+            # Пустое пространство между кнопками
+            top_bar.addStretch()
+
+            # Кнопка "Профиль"
+            profile_btn = QPushButton()
+            profile_btn.setIcon(QIcon("man.png"))
+            profile_btn.setFixedSize(50, 50)
+            profile_btn.clicked.connect(self.show_profile_screen)
+            top_bar.addWidget(profile_btn)
+
+            layout.addLayout(top_bar)
+
+            # Название компонента
+            self.component_label = QLabel("")
+            layout.addWidget(self.component_label)
+
+            # Выпадающий список для выбора сборки
+            self.builds_combo_box = QComboBox()
+            layout.addWidget(self.builds_combo_box)
+
+            # Кнопка "Добавить в сборку"
+            add_button = QPushButton("Добавить в сборку")
+            add_button.clicked.connect(self.add_component_to_build)
+            layout.addWidget(add_button)
+
+            self.add_to_build_screen.setLayout(layout)
+            self.central_widget.addWidget(self.add_to_build_screen)
+
+        # Получаем список активных сборок
+        self.cursor.execute("SELECT id_сборки, Название_сборки FROM Сборки WHERE Статус_сборки = %s", ("Активная",))
+        builds = self.cursor.fetchall()
+        self.builds_combo_box.clear()
+        for build in builds:
+            self.builds_combo_box.addItem(build[1], build[0])  # Добавляем название и сохраняем id в data
+
+        self.central_widget.setCurrentWidget(self.add_to_build_screen)
+
+    def add_component_to_build(self):
+        """Добавление компонента в сборку"""
+        try:
+            # Получаем id выбранной сборки
+            selected_build_id = self.builds_combo_box.currentData()
+            if not selected_build_id:
+                print("Не выбрана сборка!")
+                return
+
+            # Название компонента
+            component_name = self.component_label.text().split(": ")[1]  # Из текста QLabel
+
+            # Пример: добавляем компонент в поле "Видеокарта" (или другое)
+            self.cursor.execute("""
+                UPDATE Компоненты_сборки
+                SET "Видеокарта" = %s
+                WHERE id_сборки = %s
+            """, (component_name, selected_build_id))
+
+            self.conn.commit()
+            print("Компонент успешно добавлен в сборку!")
+        except Exception as e:
+            print(f"Ошибка при добавлении компонента: {e}")
 
     def create_active_builds_screen(self):
         # Создание экрана активных сборок
