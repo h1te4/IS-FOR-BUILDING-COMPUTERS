@@ -6,12 +6,14 @@ from decimal import Decimal
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QApplication,
     QMainWindow,
     QWidget,
     QStackedWidget,
     QVBoxLayout,
+    QGridLayout,
     QHBoxLayout,
     QPushButton,
     QLabel,
@@ -19,6 +21,7 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QListWidget,
     QListWidgetItem,
+    QLineEdit,
     QComboBox,
     QFormLayout
 )
@@ -166,7 +169,11 @@ class MainWindow(QMainWindow):
         if self.is_user_logged_in():
             # Информация о пользователе
             profile_info = QLabel(f"Никнейм: {self.username}\nДата регистрации: {self.registration_date}")
+            profile_info.setStyleSheet("font-size: 30px; font-weight: bold;")  # Устанавливаем размер и стиль шрифта
             layout.addWidget(profile_info)
+
+            # Добавляем пустое пространство ниже текста
+            layout.addStretch()
 
             # Кнопка выхода
             logout_button = QPushButton("Выход")
@@ -175,7 +182,10 @@ class MainWindow(QMainWindow):
         else:
             # Сообщение для неавторизованных пользователей
             profile_info = QLabel("Вы не вошли в профиль")
+            profile_info.setStyleSheet("font-size: 30px; font-weight: bold;")
             layout.addWidget(profile_info)
+            # Добавляем пустое пространство ниже текста
+            layout.addStretch()
 
             # Кнопка регистрации
             register_button = QPushButton("Регистрация")
@@ -272,30 +282,55 @@ class MainWindow(QMainWindow):
     def create_main_menu(self):
         """Создание главного меню"""
         screen = QWidget()
-        layout = QVBoxLayout()
+        main_layout = QVBoxLayout()
 
-        # Кнопки
-        buttons_layout = QVBoxLayout()
+        # === Верхняя панель ===
+        top_layout = QHBoxLayout()
+        profile_btn = QPushButton()  # Создание кнопки профиля
+        profile_btn.setIcon(QIcon("man.png"))  # Устанавливаем иконку
+        profile_btn.setIconSize(profile_btn.sizeHint())  # Задаём размер иконки
+        profile_btn.setFixedSize(50, 50)  # Устанавливаем фиксированный размер кнопки
+        profile_btn.clicked.connect(self.show_profile_screen)  # Обработчик для открытия экрана профиля
+
+        top_layout.addStretch()  # Добавляем отступ слева
+        top_layout.addWidget(profile_btn)  # Добавляем кнопку профиля
+
+        # === Центральная панель с кнопками ===
+        buttons_layout = QGridLayout()  # Используем сетку для центрирования кнопок
+
+        # Создание кнопок
         btn_new_build = QPushButton("Новая сборка")
+        btn_new_build.setFixedSize(300, 70)
         btn_new_build.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.new_build_screen))
 
         btn_components = QPushButton("Склад комплектующих")
+        btn_components.setFixedSize(300, 70)
         btn_components.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.components_screen))
 
         btn_active_builds = QPushButton("Активные сборки")
-        btn_active_builds.clicked.connect(
-            lambda: self.central_widget.setCurrentWidget(self.active_builds_screen))
+        btn_active_builds.setFixedSize(300, 70)
+        btn_active_builds.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.active_builds_screen))
 
         btn_finished_builds = QPushButton("Завершённые сборки")
+        btn_finished_builds.setFixedSize(300, 70)
         btn_finished_builds.clicked.connect(lambda: [self.show_finished_builds(), self.central_widget.setCurrentWidget(self.finished_builds_screen)])
 
-        # Добавляет кнопки в макет
-        for btn in [btn_new_build, btn_components, btn_active_builds, btn_finished_builds]:
-            btn.setFixedHeight(50)
-            buttons_layout.addWidget(btn)
+        # Расположение кнопок в сетке
+        buttons_layout.addWidget(btn_new_build, 0, 0)  # Первая кнопка (верхний левый угол)
+        buttons_layout.addWidget(btn_components, 0, 1)  # Вторая кнопка (верхний правый угол)
+        buttons_layout.addWidget(btn_active_builds, 1, 0)  # Третья кнопка (нижний левый угол)
+        buttons_layout.addWidget(btn_finished_builds, 1, 1)  # Четвёртая кнопка (нижний правый угол)
 
-        layout.addLayout(buttons_layout)
-        screen.setLayout(layout)
+        # Выравниваем кнопки по центру
+        buttons_layout.setAlignment(Qt.AlignCenter)
+
+        # === Собираем основной макет ===
+        main_layout.addLayout(top_layout)  # Верхняя панель (с кнопкой профиля)
+        main_layout.addStretch()  # Отступ перед центральной панелью
+        main_layout.addLayout(buttons_layout)  # Центральная панель (с кнопками навигации)
+        main_layout.addStretch()  # Отступ после центральной панели
+
+        screen.setLayout(main_layout)
         return screen
 
     def create_finished_builds_screen(self):
@@ -473,9 +508,6 @@ class MainWindow(QMainWindow):
 
             # Получаем ID текущего пользователя
             user_id = self.get_user_id()
-            if user_id is None:
-                QMessageBox.warning(self, "Ошибка", "Вы должны войти в профиль, чтобы видеть завершённые сборки!")
-                return
 
             # Выполняем запрос к базе данных для получения завершённых сборок
             self.cursor.execute("""
@@ -630,32 +662,103 @@ class MainWindow(QMainWindow):
             print(f"Ошибка при загрузке компонентов: {e}")
 
     def create_components_screen(self):
-        """Создание экрана склада комплектующих"""
+        """Создаёт экран склада комплектующих"""
         screen = QWidget()
+        screen.setObjectName("components_screen")
+
+        # Главный layout
         layout = QVBoxLayout()
 
-        # Кнопка "Добавить"
-        add_button = QPushButton("Добавить")
-        add_button.setFixedHeight(50)
-        add_button.clicked.connect(self.show_add_component_screen)  # Открыть окно добавления
-        layout.addWidget(add_button)
+        # Верхняя панель с кнопками "Назад" и "Профиль"
+        top_bar = QHBoxLayout()
 
+        back_btn = QPushButton()
+        back_btn.setIcon(QIcon("back.png"))
+        back_btn.setFixedSize(50, 50)
+        back_btn.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.main_menu))
+        top_bar.addWidget(back_btn)
+
+        # Добавляем пустое пространство между кнопками
+        top_bar.addStretch()
+
+        # Кнопка "Профиль"
+        profile_btn = QPushButton()
+        profile_btn.setIcon(QIcon("man.png"))  # Убедитесь, что файл man.png существует
+        profile_btn.setFixedSize(50, 50)  # Размер кнопки
+        profile_btn.clicked.connect(self.create_main_menu)  # Обработчик для кнопки "Профиль"
+        top_bar.addWidget(profile_btn)  # Добавляем кнопку "Профиль" в top_bar
+
+        # Добавляем top_bar в основной layout
+        layout.addLayout(top_bar)
+
+        # Поле для поиска
+        self.search_bar = QLineEdit()
+        self.search_bar.setPlaceholderText("Введите название компонента и нажмите Enter")
+        self.search_bar.returnPressed.connect(self.search_components)  # Поиск выполняется по Enter
+        layout.addWidget(self.search_bar)
+
+        # Список для отображения компонентов
         self.components_list = QListWidget()
-        self.load_and_display_all_components()
         layout.addWidget(self.components_list)
 
+        # Устанавливаем layout для экрана
         screen.setLayout(layout)
+
+        # Отображаем все компоненты из базы при загрузке
+        self.load_and_display_all_components()
+
         return screen
 
-    def show_add_component_screen(self):
+    def search_components(self):
+        """
+        Выполняет поиск компонентов по названию, используя введённый текст.
+        Если строка поиска пустая, загружает все компоненты.
+        """
+        search_text = self.search_bar.text().strip()  # Получаем текст из строки поиска
+
+        if not search_text:
+            # Если текст пустой, загружаем все компоненты
+            self.load_and_display_all_components()
+            return
+
         try:
-            print("Переход на экран добавления комплектующих")  # Отладка
-            self.add_component_screen = self.create_add_component_screen()
-            self.central_widget.addWidget(self.add_component_screen)
-            self.central_widget.setCurrentWidget(self.add_component_screen)
-            print("Экран добавления комплектующих успешно открыт")  # Отладка
+            # Очищаем список перед поиском
+            self.components_list.clear()
+
+            # Сопоставление категорий с таблицами
+            table_mapping = {
+                "Видеокарты": "Видеокарты",
+                "Процессоры": "Процессоры",
+                "Материнская плата": "Материнская плата",
+                "Корпус": "Корпус",
+                "Охлаждение процессора": "Охлаждение процессора",
+                "Оперативная память": "Оперативная память",
+                "Накопители": "Накопители",
+                "Блоки_питания": "Блоки_питания",
+                "Доп детали": "Доп детали"
+            }
+
+            for category, table in table_mapping.items():
+                # Выполняем запрос с фильтрацией
+                self.cursor.execute(f"""
+                    SELECT "Название", "Цена"
+                    FROM "{table}"
+                    WHERE "Название" ILIKE %s
+                """, (f'%{search_text}%',))
+                components = self.cursor.fetchall()
+
+                if not components:
+                    continue
+
+                # Добавляем компоненты в список
+                for component in components:
+                    name, price = component
+                    item_text = f"{category}: {name}\nЦена: {price} руб."
+                    item = QListWidgetItem(item_text)
+                    self.components_list.addItem(item)
+
         except Exception as e:
-            print(f"Ошибка в show_add_component_screen: {e}")  # Отладка ошибки
+            print(f"Ошибка при поиске компонентов: {e}")
 
     def create_add_component_screen(self):
         """Создание экрана добавления комплектующих"""
@@ -854,10 +957,6 @@ class MainWindow(QMainWindow):
 
             # Получает ID текущего пользователя
             user_id = self.get_user_id()
-            if user_id is None:
-                print("Пользователь не авторизован.")
-                QMessageBox.warning(self, "Ошибка", "Вы должны войти в профиль, чтобы видеть активные сборки!")
-                return
 
             print(f"Выполняем запрос для получения активных сборок для пользователя с ID {user_id}...")
             self.cursor.execute("""
