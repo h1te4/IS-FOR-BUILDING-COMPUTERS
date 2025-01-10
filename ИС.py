@@ -368,10 +368,8 @@ class MainWindow(QMainWindow):
         screen.setLayout(layout)
         return screen
 
-    def create_new_build_screen(self, mode="new", build_name="", total_price=0):
-        # Создание экрана сборки (новой или для редактирования)
-        print(f"Создаём экран сборки. Режим: {mode}, Название: {build_name}, Цена: {total_price}")  # Отладка
-
+    def create_new_build_screen(self, build_name="", total_price=0):
+        # Создание экрана новой сборки
         screen = QWidget()
         layout = QVBoxLayout()
 
@@ -382,15 +380,15 @@ class MainWindow(QMainWindow):
         back_button.setFixedSize(60, 40)
         back_button.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.main_menu))
 
-        # Устанавливаем заголовок окна в зависимости от режима
-        title_label = QLabel("Редактирование сборки" if mode == "edit" else "Новая сборка")
+        # Устанавливаем заголовок окна
+        title_label = QLabel("Новая сборка")
         title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
 
         save_btn = QPushButton("Сохранить")
         save_btn.clicked.connect(self.save_build)  # Обработчик для кнопки "Сохранить"
 
-        delete_btn = QPushButton("Удалить")
-        delete_btn.clicked.connect(self.delete_build)  # Обработчик для кнопки "Удалить"
+        cancel_btn = QPushButton("Отменить")
+        cancel_btn.clicked.connect(self.cancel_selection)  # Обработчик для кнопки "Отменить"
 
         profile_btn = QPushButton()
         profile_btn.setIcon(QIcon("man.png"))
@@ -401,18 +399,8 @@ class MainWindow(QMainWindow):
         top_bar.addWidget(back_button)
         top_bar.addWidget(title_label)
         top_bar.addStretch()
-
-        # Кнопки только в режиме редактирования
-        if mode == "edit":
-            top_bar.addWidget(delete_btn)
-
         top_bar.addWidget(save_btn)
-
-        # Кнопка "Отменить"
-        cancel_btn = QPushButton("Отменить")
-        cancel_btn.clicked.connect(self.cancel_selection)  # Обработчик для кнопки "Отменить"
-        top_bar.addWidget(cancel_btn)  # Добавляем кнопку "Отменить"
-
+        top_bar.addWidget(cancel_btn)  # Кнопка "Отменить" добавлена в верхнюю панель
         top_bar.addWidget(profile_btn)
 
         # Секция выбора комплектующих
@@ -431,6 +419,7 @@ class MainWindow(QMainWindow):
             ("Доп. детали", "Доп. детали")
         ]
 
+        # Добавляем кнопки для выбора категорий
         for label, category in components:
             btn = QPushButton(label)
             btn.setFixedHeight(40)
@@ -440,7 +429,7 @@ class MainWindow(QMainWindow):
 
         # Добавление элементов в основной макет
         layout.addLayout(top_bar)
-        layout.addLayout(components_layout)  # Добавляем layout с кнопками в основной layout
+        layout.addLayout(components_layout)
 
         # Список компонентов для сборки
         self.new_build_list = QListWidget()
@@ -460,7 +449,7 @@ class MainWindow(QMainWindow):
         bottom_bar.addWidget(new_build_label)
         bottom_bar.addWidget(self.build_name_input)
 
-        layout.addLayout(bottom_bar)  # Добавляем нижнюю панель в layout
+        layout.addLayout(bottom_bar)  # Добавляет нижнюю панель в layout
 
         screen.setLayout(layout)
         return screen
@@ -622,32 +611,214 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить завершённые сборки: {e}")
 
     def edit_build(self, build_id):
-        # Редактирование сборки
         try:
-            print(f"Редактирование сборки с ID {build_id}")  # Отладка
+            # Запрашиваем информацию о сборке из базы данных
             self.cursor.execute("""
                 SELECT "Название_сборки", "Общая_цена"
                 FROM "Сборки"
                 WHERE "id_сборки" = %s
             """, (build_id,))
-            build = self.cursor.fetchone()
+            build_info = self.cursor.fetchone()
 
-            if build:
-                build_name, total_price = build
-                print(f"Открываем окно редактирования для сборки: {build_name}, Цена: {total_price}")  # Отладка
+            if build_info:
+                build_name = build_info[0]
+                total_price = build_info[1]
 
-                # Открываем экран редактирования сборки
-                self.edit_build_screen = self.create_new_build_screen(
-                    mode="edit",
+                # Создаём экран редактирования сборки и передаем необходимые параметры
+                edit_screen = self.create_edit_build_screen(
+                    build_id=build_id,
                     build_name=build_name,
                     total_price=total_price
                 )
-                self.central_widget.setCurrentWidget(self.edit_build_screen)  # Переход на экран редактирования
+                # Открываем экран редактирования
+                self.central_widget.setCurrentWidget(edit_screen)
             else:
                 QMessageBox.warning(self, "Ошибка", "Сборка не найдена.")
         except Exception as e:
-            print(f"Ошибка при редактировании сборки: {e}")  # Отладка
-            QMessageBox.critical(self, "Ошибка", f"Ошибка при редактировании сборки: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить сборку для редактирования: {e}")
+
+    def create_edit_build_screen(self, build_id=None, build_name="", total_price=0):
+
+        screen = QWidget()
+        layout = QVBoxLayout()
+
+        # Верхняя панель
+        top_bar = QHBoxLayout()
+        back_button = QPushButton()
+        back_button.setIcon(QIcon("back.png"))
+        back_button.setFixedSize(60, 40)
+        back_button.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.main_menu))
+
+        # Устанавливаем заголовок окна
+        title_label = QLabel("Редактирование сборки")
+        title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
+        save_btn = QPushButton("Сохранить")
+        save_btn.clicked.connect(self.save_build)  # Обработчик для кнопки "Сохранить"
+
+        cancel_btn = QPushButton("Отменить")
+        cancel_btn.setFixedHeight(40)
+        cancel_btn.clicked.connect(self.cancel_selection)  # Обработчик для кнопки "Отменить"
+
+        delete_btn = QPushButton("Удалить")
+        delete_btn.clicked.connect(self.delete_build)  # Обработчик для кнопки "Удалить"
+
+        profile_btn = QPushButton()
+        profile_btn.setIcon(QIcon("man.png"))
+        profile_btn.setIconSize(profile_btn.sizeHint())
+        profile_btn.setFixedSize(50, 50)
+        profile_btn.clicked.connect(self.show_profile_screen)  # Добавлен обработчик для кнопки Профиль
+
+        top_bar.addWidget(back_button)
+        top_bar.addWidget(title_label)
+        top_bar.addStretch()
+        top_bar.addWidget(delete_btn)
+        top_bar.addWidget(save_btn)
+        top_bar.addWidget(cancel_btn)
+        top_bar.addWidget(profile_btn)
+
+        # Секция выбора комплектующих
+        components_layout = QVBoxLayout()
+        self.component_buttons = {}  # Словарь для хранения кнопок
+
+        components = [
+            ("Видеокарта", "Видеокарта"),
+            ("Процессор", "Процессор"),
+            ("Мат. плата", "Материнская плата"),
+            ("Корпус", "Корпус"),
+            ("Охлаждение процессора", "Охлаждение процессора"),
+            ("Оперативная память", "Оперативная память"),
+            ("Накопители", "Накопитель"),
+            ("Блок питания", "Блок питания"),
+            ("Доп. детали", "Доп. детали")
+        ]
+
+        # Добавляем кнопки для выбора категорий
+        for label, category in components:
+            btn = QPushButton(label)
+            btn.setFixedHeight(40)
+            btn.clicked.connect(
+                lambda checked, c=category: self.show_components_for_category(c, build_id))
+            components_layout.addWidget(btn)
+            self.component_buttons[category] = btn
+
+        # Добавление элементов в основной макет
+        layout.addLayout(top_bar)
+        layout.addLayout(components_layout)
+
+        # Список компонентов для сборки
+        self.new_build_list = QListWidget()
+        self.new_build_list.itemDoubleClicked.connect(self.select_component)  # Обработчик двойного клика
+        layout.addWidget(self.new_build_list)
+
+        # Метка для отображения цены сборки
+        self.build_price_label = QLabel(f"Цена: {total_price} руб.")  # Устанавливаем общую цену
+        layout.addWidget(self.build_price_label)
+
+        # Нижняя панель с названием сборки
+        bottom_bar = QHBoxLayout()
+        new_build_label = QLabel("Название сборки: ")
+        self.build_name_input = QLineEdit(
+            build_name)  # Поле для ввода названия сборки (предзаполняем для редактирования)
+        self.build_name_input.setPlaceholderText("Введите название сборки...")
+        bottom_bar.addWidget(new_build_label)
+        bottom_bar.addWidget(self.build_name_input)
+
+        layout.addLayout(bottom_bar)  # Добавляет нижнюю панель в layout
+
+        screen.setLayout(layout)
+        return screen
+
+    def save_changes(self):
+        try:
+            # Получаем значения выбранных компонентов из комбобоксов
+            updated_components = {}
+            for category in ["Процессоры", "Видеокарты", "Материнская плата", "Корпус",
+                             "Охлаждение процессора", "Оперативная память", "Накопители",
+                             "Блоки_питания", "Доп. детали"]:
+                combo_box = self.central_widget.findChild(QComboBox, category)
+                selected_component = combo_box.currentText()
+                updated_components[category] = selected_component
+
+            # Обновляем данные в базе для текущей сборки
+            self.cursor.execute("""
+                UPDATE "Компоненты_сборки"
+                SET "Процессор" = %s, "Видеокарта" = %s, "Материнская плата" = %s,
+                    "Корпус" = %s, "Охлаждение процессора" = %s, "Оперативная память" = %s,
+                    "Накопитель" = %s, "Блок питания" = %s, "Доп. детали" = %s
+                WHERE "id_сборки" = %s
+            """, (
+                updated_components["Процессор"],
+                updated_components["Видеокарта"],
+                updated_components["Материнская плата"],
+                updated_components["Корпус"],
+                updated_components["Охлаждение процессора"],
+                updated_components["Оперативная память"],
+                updated_components["Накопитель"],
+                updated_components["Блок питания"],
+                updated_components["Доп. детали"],
+                self.current_build_id
+            ))
+
+            # Подтверждаем изменения в базе данных
+            self.connection.commit()
+
+            # Показываем сообщение об успешном сохранении
+            QMessageBox.information(self, "Успех", "Изменения успешно сохранены!")
+
+            # Возвращаемся на экран с активными сборками (или любой другой нужный экран)
+            self.show_active_builds_screen()
+
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить изменения: {e}")
+
+    def select_component_from_list(self, category):
+        # Открываем экран для выбора компонента из базы данных
+        self.cursor.execute(f"""
+            SELECT "Название", "Описание", "Цена"
+            FROM "{category}"  -- Пример: Видеокарты, Процессоры и т.д.
+        """)
+        components = self.cursor.fetchall()
+
+        # Создаем экран для выбора компонента
+        selection_screen = QWidget()
+        layout = QVBoxLayout()
+        selection_screen.setLayout(layout)
+
+        # Заголовок для категории
+        category_label = QLabel(f"Выберите {category}")
+        layout.addWidget(category_label)
+
+        # Список компонентов
+        for component_name, description, price in components:
+            button = QPushButton(f"{component_name} — {price} руб.")
+            button.clicked.connect(
+                lambda _, comp_name=component_name: self.update_selected_component(comp_name, category))
+            layout.addWidget(button)
+
+        # Добавляем экран в центральный виджет и показываем
+        self.central_widget.addWidget(selection_screen)
+        self.central_widget.setCurrentWidget(selection_screen)
+
+    def update_selected_component(self, component_name, category):
+        # Обновляем выбранный компонент для категории
+        self.selected_components[category] = component_name
+
+        # Обновляем текст кнопки категории
+        self.update_category_button(category)
+
+        # Возвращаемся на экран редактирования сборки
+        self.return_to_edit_screen()
+
+    def update_category_button(self, category):
+        # Находим кнопку для выбранной категории и обновляем ее текст
+        buttons = self.central_widget.findChildren(QPushButton)
+        for button in buttons:
+            if button.text().startswith(category):
+                button.setText(f"{category}: {self.selected_components[category]}")
+
+    def return_to_edit_screen(self):
+        # Возвращаемся к экрану редактирования сборки
+        self.central_widget.setCurrentWidget(self.central_widget.widget(0))
 
     def open_build_editor(self, build_id, build_name, total_price):
         editor_window = BuildEditor(self, build_id, build_name, total_price)
@@ -1257,7 +1428,8 @@ class MainWindow(QMainWindow):
         back_button = QPushButton()
         back_button.setIcon(QIcon("back.png"))
         back_button.setFixedSize(50, 50)
-        back_button.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.main_menu))  # Возврат в главное меню
+        back_button.clicked.connect(
+            lambda: self.central_widget.setCurrentWidget(self.main_menu))  # Возврат в главное меню
         layout.addWidget(back_button)
 
         # Добавляем экран в стек виджетов, если он еще не добавлен
@@ -1353,22 +1525,6 @@ class BuildEditor(QWidget):
         layout.addWidget(save_button)
 
         self.setLayout(layout)
-
-    def save_changes(self):
-        new_name = self.name_input.text()
-        try:
-            self.parent().cursor.execute("""
-                UPDATE "Сборки" 
-                SET Название_сборки = %s
-                WHERE id = %s
-            """, (new_name, self.build_id))
-            self.parent().db.conn.commit()
-            QMessageBox.information(self, "Успех", "Сборка обновлена.")
-            self.close()
-            self.parent().active_builds_screen()
-        except Exception as e:
-            QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении изменений: {e}")
-
 
 class AuthWindow(QWidget):
     def __init__(self, parent, mode="login"):
