@@ -396,8 +396,11 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось завершить сборку: {e}")
 
-    def create_new_build_screen(self, build_name="", total_price=0):
-        # Создание экрана новой сборки
+    def create_new_build_screen(self, build_name="", total_price=0, is_edit=False):
+        """
+        Создаёт экран для новой или редактируемой сборки.
+        """
+        # Создание виджета и основного макета
         screen = QWidget()
         layout = QVBoxLayout()
 
@@ -408,32 +411,33 @@ class MainWindow(QMainWindow):
         back_button.setFixedSize(60, 40)
         back_button.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.main_menu))
 
-        # Устанавливаем заголовок окна
-        title_label = QLabel("Новая сборка")
+        # Заголовок
+        title_label = QLabel("Редактирование сборки" if is_edit else "Новая сборка")
         title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
 
         save_btn = QPushButton("Сохранить")
-        save_btn.clicked.connect(self.save_build)  # Обработчик для кнопки "Сохранить"
+        save_btn.clicked.connect(lambda: self.save_build() if not is_edit else self.update_build())
 
         cancel_btn = QPushButton("Отменить")
-        cancel_btn.clicked.connect(self.cancel_selection)  # Обработчик для кнопки "Отменить"
+        cancel_btn.clicked.connect(self.cancel_selection)
 
         profile_btn = QPushButton()
         profile_btn.setIcon(QIcon("man.png"))
-        profile_btn.setIconSize(profile_btn.sizeHint())
         profile_btn.setFixedSize(50, 50)
-        profile_btn.clicked.connect(self.show_profile_screen)  # Добавлен обработчик для кнопки Профиль
+        profile_btn.clicked.connect(self.show_profile_screen)
 
+        # Добавление элементов верхней панели
         top_bar.addWidget(back_button)
         top_bar.addWidget(title_label)
         top_bar.addStretch()
         top_bar.addWidget(save_btn)
-        top_bar.addWidget(cancel_btn)  # Кнопка "Отменить" добавлена в верхнюю панель
+        top_bar.addWidget(cancel_btn)
         top_bar.addWidget(profile_btn)
+        layout.addLayout(top_bar)
 
-        # Секция выбора комплектующих
+        # Секция выбора компонентов
         components_layout = QHBoxLayout()
-        self.component_buttons = {}  # Словарь для хранения кнопок
+        self.component_buttons = {}
 
         components = [
             ("Видеокарта", "Видеокарта"),
@@ -444,10 +448,10 @@ class MainWindow(QMainWindow):
             ("Оперативная память", "Оперативная память"),
             ("Накопители", "Накопитель"),
             ("Блок питания", "Блок питания"),
-            ("Доп. детали", "Доп. детали")
+            ("Доп. детали", "Доп. детали"),
         ]
 
-        # Добавляем кнопки для выбора категорий
+        # Кнопки для выбора категорий
         for label, category in components:
             btn = QPushButton(label)
             btn.setFixedHeight(40)
@@ -455,30 +459,26 @@ class MainWindow(QMainWindow):
             components_layout.addWidget(btn)
             self.component_buttons[category] = btn
 
-        # Добавление элементов в основной макет
-        layout.addLayout(top_bar)
         layout.addLayout(components_layout)
 
         # Список компонентов для сборки
         self.new_build_list = QListWidget()
-        self.new_build_list.itemDoubleClicked.connect(self.select_component)  # Обработчик двойного клика
+        self.new_build_list.itemDoubleClicked.connect(self.select_component)
         layout.addWidget(self.new_build_list)
 
-        # Метка для отображения цены сборки
-        self.build_price_label = QLabel(f"Цена: {total_price} руб.")  # Устанавливаем общую цену
+        # Метка для отображения цены
+        self.build_price_label = QLabel(f"Цена: {total_price} руб.")
         layout.addWidget(self.build_price_label)
 
         # Нижняя панель с названием сборки
         bottom_bar = QHBoxLayout()
         new_build_label = QLabel("Название сборки: ")
-        self.build_name_input = QLineEdit(
-            build_name)  # Поле для ввода названия сборки (предзаполняем для редактирования)
+        self.build_name_input = QLineEdit(build_name)
         self.build_name_input.setPlaceholderText("Введите название сборки...")
         bottom_bar.addWidget(new_build_label)
         bottom_bar.addWidget(self.build_name_input)
 
-        layout.addLayout(bottom_bar)  # Добавляет нижнюю панель в layout
-
+        layout.addLayout(bottom_bar)
         screen.setLayout(layout)
         return screen
 
@@ -639,34 +639,35 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить завершённые сборки: {e}")
 
     def edit_build(self, build_id):
+        """
+        Открывает экран для редактирования сборки.
+        """
         try:
-            print(f"Начало редактирования сборки с ID: {build_id}")  # Отладка
-
-            # Запрашиваем информацию о сборке
+            # Получаем данные сборки
             self.cursor.execute("""
                 SELECT "Название_сборки", "Общая_цена"
                 FROM "Сборки"
                 WHERE "id_сборки" = %s
             """, (build_id,))
-            build_info = self.cursor.fetchone()
+            build_data = self.cursor.fetchone()
 
-            if not build_info:
+            if not build_data:
                 QMessageBox.warning(self, "Ошибка", "Сборка не найдена.")
                 return
 
-            build_name, total_price = build_info
+            build_name, total_price = build_data
 
-            # Загружаем компоненты сборки
+            # Получаем компоненты сборки
             self.cursor.execute("""
-                SELECT "Процессор", "Видеокарта", "Материнская плата", "Корпус", 
-                       "Охлаждение процессора", "Оперативная память", "Накопитель", 
+                SELECT "Процессор", "Видеокарта", "Материнская плата", "Корпус",
+                       "Охлаждение процессора", "Оперативная память", "Накопитель",
                        "Блок питания", "Доп. детали"
                 FROM "Компоненты_сборки"
                 WHERE "id_сборки" = %s
             """, (build_id,))
-            component_info = self.cursor.fetchone()
+            component_data = self.cursor.fetchone()
 
-            if not component_info:
+            if not component_data:
                 QMessageBox.warning(self, "Ошибка", "Компоненты сборки не найдены.")
                 return
 
@@ -674,24 +675,30 @@ class MainWindow(QMainWindow):
             categories = [
                 "Процессор", "Видеокарта", "Материнская плата", "Корпус",
                 "Охлаждение процессора", "Оперативная память", "Накопитель",
-                "Блок питания", "Доп. детали"
+                "Блок питания", "Доп. детали",
             ]
-            self.selected_components = {
-                category: component for category, component in zip(categories, component_info) if component
+            selected_components = {
+                category: component for category, component in zip(categories, component_data) if component
             }
 
-            print(f"Компоненты для редактирования: {self.selected_components}")  # Отладка
-
-            # Создаём экран редактирования
-            edit_screen = self.create_edit_build_screen(
-                build_id=build_id,
+            # Создаём экран для редактирования сборки
+            edit_screen = self.create_new_build_screen(
                 build_name=build_name,
                 total_price=total_price,
+                is_edit=True
             )
-            self.central_widget.setCurrentWidget(edit_screen)
 
+            # Обновляем кнопки категорий выбранными компонентами
+            for category, component in selected_components.items():
+                if category in self.component_buttons:
+                    # Устанавливаем текст кнопки
+                    self.component_buttons[category].setText(f"{category}\n{component}")
+
+            # Устанавливаем экран
+            self.central_widget.addWidget(edit_screen)
+            self.central_widget.setCurrentWidget(edit_screen)
         except Exception as e:
-            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить сборку для редактирования: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить сборку: {e}")
 
     def create_edit_build_screen(self, build_id, build_name="", total_price=0):
         print(f"Создаём экран редактирования для сборки: {build_name} (ID: {build_id})")  # Отладка
@@ -763,7 +770,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(bottom_bar)
         screen.setLayout(layout)
         return screen
-    
+
     def save_changes(self):
         try:
             # Получаем значения выбранных компонентов из комбобоксов
