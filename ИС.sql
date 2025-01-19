@@ -5,70 +5,97 @@ BEGIN;
 
 CREATE TABLE IF NOT EXISTS public."Блоки_питания"
 (
-    "id_Компонента" integer NOT NULL,
+    "Название" character varying(255) COLLATE pg_catalog."default" NOT NULL,
     "Мощность" integer NOT NULL,
-    "Сертификат" character varying(50) COLLATE pg_catalog."default" NOT NULL,
-    CONSTRAINT "Блоки_питания_pkey" PRIMARY KEY ("id_Компонента")
+    "Описание" text COLLATE pg_catalog."default" NOT NULL,
+    "Цена" numeric(8, 2) NOT NULL,
+    CONSTRAINT "Блоки_питания_pkey" PRIMARY KEY ("Название")
 );
 
 CREATE TABLE IF NOT EXISTS public."Видеокарты"
 (
-    "id_Компонента" integer NOT NULL,
-    "Частота_памяти" numeric(10, 2) NOT NULL,
-    "Тип_памяти" character varying(50) COLLATE pg_catalog."default" NOT NULL,
-    CONSTRAINT "Видеокарты_pkey" PRIMARY KEY ("id_Компонента")
+    "Название" character varying(255) COLLATE pg_catalog."default" NOT NULL,
+    "Описание" text COLLATE pg_catalog."default" NOT NULL,
+    "Цена" numeric(8, 2) NOT NULL,
+    CONSTRAINT "Видеокарты_pkey" PRIMARY KEY ("Название")
+);
+
+CREATE TABLE IF NOT EXISTS public."Доп детали"
+(
+    "Название" character varying(255) COLLATE pg_catalog."default" NOT NULL,
+    "Описание" text COLLATE pg_catalog."default" NOT NULL,
+    "Цена" numeric(8, 2) NOT NULL,
+    CONSTRAINT "Доп детали_pkey" PRIMARY KEY ("Название")
 );
 
 CREATE TABLE IF NOT EXISTS public."Компоненты"
 (
-    "id_Компонента" serial NOT NULL,
-    "Категория" character varying(255) COLLATE pg_catalog."default" NOT NULL,
+    "Id_Компонента" serial NOT NULL,
     "Название" character varying(255) COLLATE pg_catalog."default" NOT NULL,
-    "Описание" text COLLATE pg_catalog."default",
     "Цена" numeric(8, 2) NOT NULL,
-    CONSTRAINT "Компоненты_pkey" PRIMARY KEY ("id_Компонента")
+    "Категория" character varying(255) COLLATE pg_catalog."default" NOT NULL,
+    CONSTRAINT "Компоненты_pkey" PRIMARY KEY ("Id_Компонента")
+);
+
+CREATE TABLE IF NOT EXISTS public."Компоненты_сборки"
+(
+    "Процессор" character varying(255) COLLATE pg_catalog."default",
+    "Видеокарта" character varying(255) COLLATE pg_catalog."default",
+    "Материнская плата" character varying(255) COLLATE pg_catalog."default",
+    "Корпус" character varying(255) COLLATE pg_catalog."default",
+    "Охлаждение процессора" character varying(255) COLLATE pg_catalog."default",
+    "Оперативная память" character varying(255) COLLATE pg_catalog."default",
+    "Накопитель" character varying(255) COLLATE pg_catalog."default",
+    "Блок питания" character varying(255) COLLATE pg_catalog."default",
+    "Доп. детали" character varying(255) COLLATE pg_catalog."default",
+    id serial NOT NULL,
+    "id_сборки" integer,
+    CONSTRAINT "Компоненты_сборки_pkey" PRIMARY KEY (id)
 );
 
 CREATE TABLE IF NOT EXISTS public."Корпус"
 (
-    "id_Корпуса" serial NOT NULL,
     "Название" character varying(255) COLLATE pg_catalog."default" NOT NULL,
     "Описание" text COLLATE pg_catalog."default" NOT NULL,
-    "Цена" numeric(10, 2) NOT NULL,
-    CONSTRAINT "Корпус_pkey" PRIMARY KEY ("id_Корпуса"),
-    CONSTRAINT "Корпус_Название_key" UNIQUE ("Название")
+    "Цена" numeric(8, 2) NOT NULL,
+    "Размер" character varying(30) COLLATE pg_catalog."default",
+    CONSTRAINT "Корпус_pkey" PRIMARY KEY ("Название")
 );
 
-CREATE TABLE IF NOT EXISTS public."Корпус_Размеры"
+CREATE TABLE IF NOT EXISTS public."Материнская плата"
 (
-    "id_Корпуса" integer NOT NULL,
-    "id_Размера" integer NOT NULL,
-    CONSTRAINT "Корпус_Размеры_pkey" PRIMARY KEY ("id_Корпуса", "id_Размера")
+    "Название" character varying(255) COLLATE pg_catalog."default" NOT NULL,
+    "Сокет" character varying(100) COLLATE pg_catalog."default" NOT NULL,
+    "Описание" text COLLATE pg_catalog."default" NOT NULL,
+    "Цена" numeric(8, 2) NOT NULL,
+    "Размер" character varying(30) COLLATE pg_catalog."default",
+    CONSTRAINT "Материнская плата_pkey" PRIMARY KEY ("Название")
 );
 
-CREATE TABLE IF NOT EXISTS public."Материнские_платы"
+CREATE TABLE IF NOT EXISTS public."Накопители"
 (
-    "id_Компонента" integer NOT NULL,
-    "Сокет" character varying(50) COLLATE pg_catalog."default" NOT NULL,
-    "Размер" character varying(50) COLLATE pg_catalog."default" NOT NULL,
-    CONSTRAINT "Материнские_платы_pkey" PRIMARY KEY ("id_Компонента")
+    "Название" character varying(255) COLLATE pg_catalog."default" NOT NULL,
+    "Объём" character varying(100) COLLATE pg_catalog."default" NOT NULL,
+    "Описание" text COLLATE pg_catalog."default" NOT NULL,
+    "Цена" numeric(8, 2) NOT NULL,
+    CONSTRAINT "Накопители_pkey" PRIMARY KEY ("Название")
 );
 
-CREATE TABLE IF NOT EXISTS public."Оперативная_память"
+CREATE TABLE IF NOT EXISTS public."Оперативная память"
 (
-    "id_Оперативной_памяти" integer NOT NULL DEFAULT nextval('"Оперативная_пам_id_Оперативной_п_seq"'::regclass),
     "Название" character varying(255) COLLATE pg_catalog."default" NOT NULL,
     "Описание" text COLLATE pg_catalog."default" NOT NULL,
-    "Цена" numeric(10, 2) NOT NULL,
-    CONSTRAINT "Оперативная_память_pkey" PRIMARY KEY ("id_Оперативной_памяти"),
-    CONSTRAINT "Оперативная_память_Название_key" UNIQUE ("Название")
+    "Цена" numeric(8, 2) NOT NULL,
+    "Тип_памяти" character varying(10) COLLATE pg_catalog."default",
+    CONSTRAINT "Оперативная память_pkey" PRIMARY KEY ("Название")
 );
 
-CREATE TABLE IF NOT EXISTS public."Оперативная_память_Типы"
+CREATE TABLE IF NOT EXISTS public."Охлаждение процессора"
 (
-    "id_Оперативной_памяти" integer NOT NULL,
-    "id_Типа_памяти" integer NOT NULL,
-    CONSTRAINT "Оперативная_память_Типы_pkey" PRIMARY KEY ("id_Оперативной_памяти", "id_Типа_памяти")
+    "Название" character varying(255) COLLATE pg_catalog."default" NOT NULL,
+    "Описание" text COLLATE pg_catalog."default" NOT NULL,
+    "Цена" numeric(8, 2) NOT NULL,
+    CONSTRAINT "Охлаждение процессора_pkey" PRIMARY KEY ("Название")
 );
 
 CREATE TABLE IF NOT EXISTS public."Пользователи"
@@ -77,31 +104,17 @@ CREATE TABLE IF NOT EXISTS public."Пользователи"
     "Никнейм" character varying(255) COLLATE pg_catalog."default" NOT NULL,
     "Пароль" character varying(255) COLLATE pg_catalog."default" NOT NULL,
     "Дата_регистрации" date,
-    CONSTRAINT "Пользователи_pkey" PRIMARY KEY ("id_Пользователя"),
-    CONSTRAINT "Пользователи_Никнейм_key" UNIQUE ("Никнейм")
+    CONSTRAINT "pk_пользователи" PRIMARY KEY ("id_Пользователя"),
+    CONSTRAINT "уникальный_никнейм" UNIQUE ("Никнейм")
 );
 
 CREATE TABLE IF NOT EXISTS public."Процессоры"
 (
-    "id_Компонента" integer NOT NULL,
-    "Сокет" character varying(50) COLLATE pg_catalog."default" NOT NULL,
-    "Частота" numeric(5, 2) NOT NULL,
-    CONSTRAINT "Процессоры_pkey" PRIMARY KEY ("id_Компонента")
-);
-
-CREATE TABLE IF NOT EXISTS public."Размеры"
-(
-    "id_Размера" serial NOT NULL,
-    "Размер" character varying(50) COLLATE pg_catalog."default" NOT NULL,
-    CONSTRAINT "Размеры_pkey" PRIMARY KEY ("id_Размера"),
-    CONSTRAINT "Размеры_Размер_key" UNIQUE ("Размер")
-);
-
-CREATE TABLE IF NOT EXISTS public."Сборка_Компоненты"
-(
-    "id_сборки" integer NOT NULL,
-    "id_компонента" integer NOT NULL,
-    CONSTRAINT "Сборка_Компоненты_pkey" PRIMARY KEY ("id_сборки", "id_компонента")
+    "Название" character varying(255) COLLATE pg_catalog."default" NOT NULL,
+    "Описание" text COLLATE pg_catalog."default" NOT NULL,
+    "Сокет" character varying(100) COLLATE pg_catalog."default" NOT NULL,
+    "Цена" numeric(8, 2) NOT NULL,
+    CONSTRAINT "Процессоры_pkey" PRIMARY KEY ("Название")
 );
 
 CREATE TABLE IF NOT EXISTS public."Сборки"
@@ -113,93 +126,70 @@ CREATE TABLE IF NOT EXISTS public."Сборки"
     "Статус_сборки" character varying(50) COLLATE pg_catalog."default" NOT NULL,
     "Дата_создания" timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     "Дата_завершения" timestamp without time zone,
-    CONSTRAINT "Сборки_pkey" PRIMARY KEY ("id_сборки")
+    CONSTRAINT "pk_сборки" PRIMARY KEY ("id_сборки")
 );
 
-CREATE TABLE IF NOT EXISTS public."Типы_памяти"
-(
-    "id_Типа_памяти" serial NOT NULL,
-    "Тип_памяти" character varying(50) COLLATE pg_catalog."default" NOT NULL,
-    CONSTRAINT "Типы_памяти_pkey" PRIMARY KEY ("id_Типа_памяти"),
-    CONSTRAINT "Типы_памяти_Тип_памяти_key" UNIQUE ("Тип_памяти")
-);
-
-ALTER TABLE IF EXISTS public."Блоки_питания"
-    ADD CONSTRAINT "fk_блок_питания" FOREIGN KEY ("id_Компонента")
-    REFERENCES public."Компоненты" ("id_Компонента") MATCH SIMPLE
+ALTER TABLE IF EXISTS public."Компоненты_сборки"
+    ADD CONSTRAINT "fk_блок_питания" FOREIGN KEY ("Блок питания")
+    REFERENCES public."Блоки_питания" ("Название") MATCH SIMPLE
     ON UPDATE NO ACTION
-    ON DELETE CASCADE;
-CREATE INDEX IF NOT EXISTS "Блоки_питания_pkey"
-    ON public."Блоки_питания"("id_Компонента");
+    ON DELETE NO ACTION;
 
 
-ALTER TABLE IF EXISTS public."Видеокарты"
-    ADD CONSTRAINT "fk_видеокарта" FOREIGN KEY ("id_Компонента")
-    REFERENCES public."Компоненты" ("id_Компонента") MATCH SIMPLE
+ALTER TABLE IF EXISTS public."Компоненты_сборки"
+    ADD CONSTRAINT "fk_видеокарта" FOREIGN KEY ("Видеокарта")
+    REFERENCES public."Видеокарты" ("Название") MATCH SIMPLE
     ON UPDATE NO ACTION
-    ON DELETE CASCADE;
-CREATE INDEX IF NOT EXISTS "Видеокарты_pkey"
-    ON public."Видеокарты"("id_Компонента");
+    ON DELETE NO ACTION;
 
 
-ALTER TABLE IF EXISTS public."Корпус_Размеры"
-    ADD CONSTRAINT "fk_корпус" FOREIGN KEY ("id_Корпуса")
-    REFERENCES public."Корпус" ("id_Корпуса") MATCH SIMPLE
+ALTER TABLE IF EXISTS public."Компоненты_сборки"
+    ADD CONSTRAINT "fk_доп_детали" FOREIGN KEY ("Доп. детали")
+    REFERENCES public."Доп детали" ("Название") MATCH SIMPLE
     ON UPDATE NO ACTION
-    ON DELETE CASCADE;
+    ON DELETE NO ACTION;
 
 
-ALTER TABLE IF EXISTS public."Корпус_Размеры"
-    ADD CONSTRAINT "fk_размер" FOREIGN KEY ("id_Размера")
-    REFERENCES public."Размеры" ("id_Размера") MATCH SIMPLE
+ALTER TABLE IF EXISTS public."Компоненты_сборки"
+    ADD CONSTRAINT "fk_корпус" FOREIGN KEY ("Корпус")
+    REFERENCES public."Корпус" ("Название") MATCH SIMPLE
     ON UPDATE NO ACTION
-    ON DELETE CASCADE;
+    ON DELETE NO ACTION;
 
 
-ALTER TABLE IF EXISTS public."Материнские_платы"
-    ADD CONSTRAINT "fk_материнская_плата" FOREIGN KEY ("id_Компонента")
-    REFERENCES public."Компоненты" ("id_Компонента") MATCH SIMPLE
+ALTER TABLE IF EXISTS public."Компоненты_сборки"
+    ADD CONSTRAINT "fk_материнская_плата" FOREIGN KEY ("Материнская плата")
+    REFERENCES public."Материнская плата" ("Название") MATCH SIMPLE
     ON UPDATE NO ACTION
-    ON DELETE CASCADE;
-CREATE INDEX IF NOT EXISTS "Материнские_платы_pkey"
-    ON public."Материнские_платы"("id_Компонента");
+    ON DELETE NO ACTION;
 
 
-ALTER TABLE IF EXISTS public."Оперативная_память_Типы"
-    ADD CONSTRAINT "fk_оперативная_память" FOREIGN KEY ("id_Оперативной_памяти")
-    REFERENCES public."Оперативная_память" ("id_Оперативной_памяти") MATCH SIMPLE
+ALTER TABLE IF EXISTS public."Компоненты_сборки"
+    ADD CONSTRAINT "fk_накопитель" FOREIGN KEY ("Накопитель")
+    REFERENCES public."Накопители" ("Название") MATCH SIMPLE
     ON UPDATE NO ACTION
-    ON DELETE CASCADE;
+    ON DELETE NO ACTION;
 
 
-ALTER TABLE IF EXISTS public."Оперативная_память_Типы"
-    ADD CONSTRAINT "fk_тип_памяти" FOREIGN KEY ("id_Типа_памяти")
-    REFERENCES public."Типы_памяти" ("id_Типа_памяти") MATCH SIMPLE
+ALTER TABLE IF EXISTS public."Компоненты_сборки"
+    ADD CONSTRAINT "fk_оперативная_память" FOREIGN KEY ("Оперативная память")
+    REFERENCES public."Оперативная память" ("Название") MATCH SIMPLE
     ON UPDATE NO ACTION
-    ON DELETE CASCADE;
+    ON DELETE NO ACTION;
 
 
-ALTER TABLE IF EXISTS public."Процессоры"
-    ADD CONSTRAINT "fk_процессор" FOREIGN KEY ("id_Компонента")
-    REFERENCES public."Компоненты" ("id_Компонента") MATCH SIMPLE
+ALTER TABLE IF EXISTS public."Компоненты_сборки"
+    ADD CONSTRAINT "fk_охлаждение" FOREIGN KEY ("Охлаждение процессора")
+    REFERENCES public."Охлаждение процессора" ("Название") MATCH SIMPLE
     ON UPDATE NO ACTION
-    ON DELETE CASCADE;
-CREATE INDEX IF NOT EXISTS "Процессоры_pkey"
-    ON public."Процессоры"("id_Компонента");
+    ON DELETE NO ACTION;
 
 
-ALTER TABLE IF EXISTS public."Сборка_Компоненты"
-    ADD CONSTRAINT "fk_компонент" FOREIGN KEY ("id_компонента")
-    REFERENCES public."Компоненты" ("id_Компонента") MATCH SIMPLE
+ALTER TABLE IF EXISTS public."Компоненты_сборки"
+    ADD CONSTRAINT "fk_процессор" FOREIGN KEY ("Процессор")
+    REFERENCES public."Процессоры" ("Название") MATCH SIMPLE
     ON UPDATE NO ACTION
-    ON DELETE CASCADE;
-
-
-ALTER TABLE IF EXISTS public."Сборка_Компоненты"
-    ADD CONSTRAINT "fk_сборка" FOREIGN KEY ("id_сборки")
-    REFERENCES public."Сборки" ("id_сборки") MATCH SIMPLE
-    ON UPDATE NO ACTION
-    ON DELETE CASCADE;
+    ON DELETE NO ACTION;
 
 
 ALTER TABLE IF EXISTS public."Сборки"
