@@ -34,42 +34,6 @@ DB_CONFIG = {
     'port': os.getenv('DB_PORT')
 }
 
-def add_component_to_db(category, name, price, description):
-    try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor()
-
-        # Определяем таблицу на основе категории
-        table_mapping = {
-            "Видеокарта": "Видеокарты",
-            "Процессор": "Процессоры",
-            "Материнская плата": "Материнская плата",
-            "Корпус": "Корпус",
-            "Охлаждение процессора": "Охлаждение процессора",
-            "Оперативная память": "Оперативная память",
-            "Накопитель": "Накопители",
-            "Блок питания": "Блоки_питания",
-            "Доп. детали": "Доп детали"
-        }
-
-        table_name = table_mapping.get(category)
-        if not table_name:
-            raise ValueError(f"Категория '{category}' не поддерживается.")
-
-        # Формируем запрос
-        query = f"""
-            INSERT INTO "{table_name}" ("Название", "Цена", "Описание")
-            VALUES (%s, %s, %s)
-        """
-        cursor.execute(query, (name, price, description))
-        conn.commit()
-
-        cursor.close()
-        conn.close()
-        print(f"{category} '{name}' добавлен в таблицу '{table_name}'.")
-    except Exception as e:
-        print(f"Ошибка добавления компонента: {e}")
-
 def create_profile_button(self):
     profile_button = QPushButton()
     profile_button.setIcon(QIcon("man.png"))
@@ -449,7 +413,7 @@ class MainWindow(QMainWindow):
             ("Корпус", "Корпус"),
             ("Охлаждение процессора", "Охлаждение процессора"),
             ("Оперативная память", "Оперативная память"),
-            ("Накопители", "Накопитель"),
+            ("Накопитель", "Накопитель"),
             ("Блок питания", "Блок питания"),
             ("Доп. детали", "Доп. детали"),
         ]
@@ -549,7 +513,7 @@ class MainWindow(QMainWindow):
                     WHERE "id_сборки" = %s AND "{category}" IS NOT NULL
                 """, (build_id,))
                 if self.cursor.fetchone():
-                    print(f"Обновляем компонент в категории {category}: {component_name}")
+                    print(f"Обновляем компонент с категорией {category}: {component_name}")
                     # Обновляем существующую запись
                     self.cursor.execute(f"""
                         UPDATE "Компоненты_сборки"
@@ -557,7 +521,7 @@ class MainWindow(QMainWindow):
                         WHERE "id_сборки" = %s
                     """, (component_name, build_id))
                 else:
-                    print(f"Добавляем новый компонент в категории {category}: {component_name}")
+                    print(f"Добавляем новый компонент с категорией {category}: {component_name}")
                     # Добавляем новую запись
                     self.cursor.execute(f"""
                         INSERT INTO "Компоненты_сборки" ("id_сборки", "{category}")
@@ -722,7 +686,7 @@ class MainWindow(QMainWindow):
             ("Корпус", "Корпус"),
             ("Охлаждение процессора", "Охлаждение процессора"),
             ("Оперативная память", "Оперативная память"),
-            ("Накопители", "Накопитель"),
+            ("Накопитель", "Накопитель"),
             ("Блок питания", "Блок питания"),
             ("Доп. детали", "Доп. детали"),
         ]
@@ -758,9 +722,9 @@ class MainWindow(QMainWindow):
         try:
             # Получаем значения выбранных компонентов из комбобоксов
             updated_components = {}
-            for category in ["Процессоры", "Видеокарты", "Материнская плата", "Корпус",
-                             "Охлаждение процессора", "Оперативная память", "Накопители",
-                             "Блоки_питания", "Доп. детали"]:
+            for category in ["Процессор", "Видеокарта", "Материнская плата", "Корпус",
+                             "Охлаждение процессора", "Оперативная память", "Накопитель",
+                             "Блок питания", "Доп. детали"]:
                 combo_box = self.central_widget.findChild(QComboBox, category)
                 selected_component = combo_box.currentText()
                 updated_components[category] = selected_component
@@ -801,7 +765,7 @@ class MainWindow(QMainWindow):
         # Открываем экран для выбора компонента из базы данных
         self.cursor.execute(f"""
             SELECT "Название", "Описание", "Цена"
-            FROM "{category}"  -- Пример: Видеокарты, Процессоры и т.д.
+            FROM "{category}"  
         """)
         components = self.cursor.fetchall()
 
@@ -921,11 +885,11 @@ class MainWindow(QMainWindow):
             # Сопоставление категорий с таблицами и характеристиками
             category_mapping = {
                 "Видеокарта": {
-                    "table": "Видеокарты",
+                    "table": "Видеокарта",
                     "fields": ["Название", "Цена", "Описание"]
                 },
                 "Процессор": {
-                    "table": "Процессоры",
+                    "table": "Процессор",
                     "fields": ["Название", "Цена", "Описание", "Сокет"]
                 },
                 "Материнская плата": {
@@ -945,15 +909,15 @@ class MainWindow(QMainWindow):
                     "fields": ["Название", "Цена", "Описание", "Тип_памяти"]
                 },
                 "Накопитель": {
-                    "table": "Накопители",
+                    "table": "Накопитель",
                     "fields": ["Название", "Цена", "Описание", "Объём"]
                 },
                 "Блок питания": {
-                    "table": "Блоки_питания",
+                    "table": "Блок питания",
                     "fields": ["Название", "Цена", "Описание", "Мощность"]
                 },
                 "Доп. детали": {
-                    "table": "Доп детали",
+                    "table": "Доп. детали",
                     "fields": ["Название", "Цена", "Описание"]
                 }
             }
@@ -1092,15 +1056,15 @@ class MainWindow(QMainWindow):
 
             # Сопоставление категорий с таблицами
             table_mapping = {
-                "Видеокарты": "Видеокарты",
-                "Процессоры": "Процессоры",
+                "Видеокарта": "Видеокарта",
+                "Процессор": "Процессор",
                 "Материнская плата": "Материнская плата",
                 "Корпус": "Корпус",
                 "Охлаждение процессора": "Охлаждение процессора",
                 "Оперативная память": "Оперативная память",
-                "Накопители": "Накопители",
-                "Блоки_питания": "Блоки_питания",
-                "Доп детали": "Доп детали"
+                "Накопитель": "Накопитель",
+                "Блок питания": "Блок питания",
+                "Доп. детали": "Доп. детали"
             }
 
             for category, table in table_mapping.items():
@@ -1233,15 +1197,15 @@ class MainWindow(QMainWindow):
 
             # Определяем таблицу
             table_mapping = {
-                "Видеокарта": "Видеокарты",
-                "Процессор": "Процессоры",
+                "Видеокарта": "Видеокарта",
+                "Процессор": "Процессор",
                 "Материнская плата": "Материнская плата",
                 "Корпус": "Корпус",
                 "Охлаждение процессора": "Охлаждение процессора",
                 "Оперативная память": "Оперативная память",
-                "Накопитель": "Накопители",
-                "Блок питания": "Блоки_питания",
-                "Доп. детали": "Доп детали"
+                "Накопитель": "Накопитель",
+                "Блок питания": "Блок питания",
+                "Доп. детали": "Доп. детали"
             }
             table_name = table_mapping.get(category)
 
@@ -1274,12 +1238,12 @@ class MainWindow(QMainWindow):
         try:
             # Сопоставление категорий с таблицами и характеристиками
             table_mapping = {
-                "Видеокарты": {
-                    "table": "Видеокарты",
+                "Видеокарта": {
+                    "table": "Видеокарта",
                     "fields": ["Название", "Описание", "Цена"]
                 },
-                "Процессоры": {
-                    "table": "Процессоры",
+                "Процессор": {
+                    "table": "Процессор",
                     "fields": ["Название", "Описание", "Сокет", "Цена"]
                 },
                 "Материнская плата": {
@@ -1298,16 +1262,16 @@ class MainWindow(QMainWindow):
                     "table": "Оперативная память",
                     "fields": ["Название", "Описание", "Цена", "Тип_памяти"]
                 },
-                "Накопители": {
-                    "table": "Накопители",
+                "Накопитель": {
+                    "table": "Накопитель",
                     "fields": ["Название", "Описание", "Цена", "Объём"]
                 },
                 "Блоки питания": {
-                    "table": "Блоки_питания",
+                    "table": "Блок питания",
                     "fields": ["Название", "Мощность", "Описание", "Цена"]
                 },
                 "Доп. детали": {
-                    "table": "Доп детали",
+                    "table": "Доп. детали",
                     "fields": ["Название", "Описание", "Цена"]
                 }
             }
@@ -1380,96 +1344,185 @@ class MainWindow(QMainWindow):
             print(f"Ошибка при загрузке компонентов: {e}")
 
     def show_add_to_build_screen(self, component_name, table_name):
-
-        # Отображение окна добавления компонента в сборку.
-        # Проверяет авторизацию пользователя, отображает список активных сборок.
-        # Проверяем, авторизован ли пользователь
-        user_id = self.get_user_id()
-        if not user_id:
-            QMessageBox.warning(self, "Ошибка", "Вы должны войти в профиль, чтобы добавлять комплектующие в сборку!")
-            return
-
-        # Если окно еще не создано, создаем его
-        if self.add_to_build_screen is None:
-            self.add_to_build_screen = QWidget()
-            layout = QVBoxLayout()
-
-            # === Верхняя панель с кнопкой "Назад" ===
-            top_bar = QHBoxLayout()
-            back_button = QPushButton()
-            back_button.setIcon(QIcon("back.png"))  # Иконка для кнопки "Назад"
-            back_button.setFixedSize(50, 50)
-            back_button.clicked.connect(
-                lambda: self.central_widget.setCurrentWidget(self.components_screen))  # Возврат на экран компонентов
-            top_bar.addWidget(back_button)
-            top_bar.addStretch()
-            layout.addLayout(top_bar)  # Добавляем верхнюю панель в основной макет
-
-            # === Отображение названия компонента ===
-            self.component_label = QLabel()
-            self.component_label.setStyleSheet("font-size: 18px; font-weight: bold; margin: 10px;")
-            layout.addWidget(self.component_label)
-
-            # === Выпадающий список для выбора сборки ===
-            self.builds_combo_box = QComboBox()
-            self.builds_combo_box.setStyleSheet("font-size: 16px; margin: 10px;")
-            layout.addWidget(self.builds_combo_box)
-
-            # === Кнопка "Добавить в сборку" ===
-            add_button = QPushButton("Добавить в сборку")
-            add_button.setStyleSheet("font-size: 16px; padding: 10px;")
-            add_button.clicked.connect(self.add_component_to_build)
-            layout.addWidget(add_button)
-
-            # Устанавливаем макет для экрана
-            self.add_to_build_screen.setLayout(layout)
-            self.central_widget.addWidget(self.add_to_build_screen)
-
-        # Устанавливаем название выбранного компонента
-        self.component_label.setText(f"Компонент: {component_name}")
-
-        # === Получаем список активных сборок ===
-        self.cursor.execute("""
-            SELECT id_сборки, Название_сборки
-            FROM Сборки
-            WHERE Статус_сборки = 'Активная' AND id_Пользователя = %s
-        """, (user_id,))
-        builds = self.cursor.fetchall()
-
-        # Очищаем и заполняем выпадающий список сборок
-        self.builds_combo_box.clear()
-        if not builds:
-            self.builds_combo_box.addItem("Нет доступных сборок", -1)
-        else:
-            for build in builds:
-                self.builds_combo_box.addItem(build[1], build[0])
-
-        # Устанавливаем экран добавления компонента как текущий
-        self.central_widget.setCurrentWidget(self.add_to_build_screen)
-
-    def add_component_to_build(self):
-        # Добавление компонента в сборку
         try:
-            # Получаем id выбранной сборки
-            selected_build_id = self.builds_combo_box.currentData()
-            if not selected_build_id:
-                QMessageBox.warning(self, "Ошибка", "Не выбрана сборка!")
+            user_id = self.get_user_id()
+            if not user_id:
+                QMessageBox.warning(self, "Ошибка",
+                                    "Вы должны войти в профиль, чтобы добавлять комплектующие в сборку!")
                 return
 
-            # Название компонента
-            component_name = self.component_label.text().split(": ")[1]  # Из текста QLabel
+            if self.add_to_build_screen is None:
+                self.add_to_build_screen = QWidget()
+                layout = QVBoxLayout()
 
-            # Пример: добавляем компонент в поле "Видеокарта" (или другое)
+                # Кнопка "Назад"
+                back_button = QPushButton()
+                back_button.setIcon(QIcon("back.png"))
+                back_button.setFixedSize(50, 50)
+                back_button.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.components_screen))
+                layout.addWidget(back_button)
+
+                # Заголовок компонента
+                self.component_label = QLabel()
+                layout.addWidget(self.component_label)
+
+                # Выпадающий список сборок
+                self.builds_combo_box = QComboBox()
+                layout.addWidget(self.builds_combo_box)
+
+                # Кнопка "Добавить в сборку"
+                self.add_button = QPushButton("Добавить в сборку")
+                layout.addWidget(self.add_button)
+
+                self.add_to_build_screen.setLayout(layout)
+                self.central_widget.addWidget(self.add_to_build_screen)
+
+            self.component_label.setText(f"Компонент: {component_name}")
+
             self.cursor.execute("""
-                UPDATE "Компоненты_сборки"
-                SET "Видеокарта" = %s
-                WHERE "id_сборки" = %s
-            """, (component_name, selected_build_id))
+                SELECT "id_сборки", "Название_сборки"
+                FROM "Сборки"
+                WHERE "Статус_сборки" = 'Активная' AND "id_Пользователя" = %s
+            """, (user_id,))
+            builds = self.cursor.fetchall()
 
-            self.db.conn.commit()  # Используем соединение через self.db
-            QMessageBox.information(self, "Успех", "Компонент успешно добавлен в сборку!")
+            self.builds_combo_box.clear()
+            if builds:
+                for build in builds:
+                    self.builds_combo_box.addItem(build[1], build[0])
+            else:
+                self.builds_combo_box.addItem("Нет доступных сборок", -1)
+
+            # Убираем предыдущие подключения кнопки "Добавить в сборку"
+            try:
+                self.add_button.clicked.disconnect()
+            except TypeError:
+                pass
+
+            self.add_button.clicked.connect(
+                lambda: self.add_component_to_build(
+                    component_name, table_name, self.builds_combo_box.currentData()
+                )
+            )
+
+            # Переход на экран добавления в сборку
+            self.central_widget.setCurrentWidget(self.add_to_build_screen)
+
         except Exception as e:
-            self.db.conn.rollback()  # Откатываем изменения в случае ошибки
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при открытии экрана: {e}")
+
+    def add_component(self):
+        try:
+            # Получаем выбранный компонент
+            selected_item = self.components_list.currentItem()
+            if not selected_item:
+                QMessageBox.warning(self, "Ошибка", "Компонент не выбран!")
+                return
+
+            # Разбираем текст компонента
+            lines = selected_item.text().split("\n")
+            if len(lines) < 1:
+                QMessageBox.warning(self, "Ошибка", "Неверный формат данных компонента!")
+                return
+
+            # Извлекаем категорию и название компонента
+            first_line = lines[0]  # Например: "Видеокарта: NVIDIA RTX 4060"
+            try:
+                category, component_name = first_line.split(": ")
+            except ValueError:
+                QMessageBox.warning(self, "Ошибка", "Ошибка в формате данных компонента!")
+                return
+
+            # Проверяем, что категория является допустимой
+            category_mapping = {
+                "Видеокарта": "Видеокарта",
+                "Процессор": "Процессор",
+                "Материнская плата": "Материнская плата",
+                "Корпус": "Корпус",
+                "Охлаждение процессора": "Охлаждение процессора",
+                "Оперативная память": "Оперативная память",
+                "Накопитель": "Накопитель",
+                "Блок питания": "Блок питания",
+                "Доп. детали": "Доп. детали",
+            }
+
+            if category not in category_mapping:
+                QMessageBox.warning(self, "Ошибка", "Категория компонента не распознана.")
+                return
+
+            # Добавляем компонент в сборку
+            print(f"Добавляем компонент: {component_name}, Категория: {category}")
+            self.add_component_to_build(component_name, category)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при добавлении компонента: {e}")
+
+    def add_component_to_build(self, component_name, table_name, build_id):
+        try:
+            if build_id == -1:
+                QMessageBox.warning(self, "Ошибка", "Выберите сборку для добавления компонента!")
+                return
+
+            # Проверка наличия такого же компонента в сборке по имени
+            self.cursor.execute(f"""
+                SELECT COUNT(*)
+                FROM "Компоненты_сборки"
+                WHERE "id_сборки" = %s AND "{table_name}" = %s
+            """, (build_id, component_name))
+
+            existing_component_count = self.cursor.fetchone()[0]
+
+            if existing_component_count > 0:
+                QMessageBox.warning(self, "Ошибка", f"Компонент '{component_name}' уже добавлен в сборку!")
+                return
+
+            # Проверка наличия другого компонента в той же категории
+            self.cursor.execute(f"""
+                SELECT "{table_name}"
+                FROM "Компоненты_сборки"
+                WHERE "id_сборки" = %s AND "{table_name}" IS NOT NULL
+            """, (build_id,))
+
+            existing_category_component = self.cursor.fetchone()
+
+            if existing_category_component:
+                QMessageBox.warning(self, "Ошибка", f"В этой сборке уже есть компонент в категории '{table_name}'!")
+                return
+
+            # Получаем цену компонента
+            self.cursor.execute(f"""
+                SELECT "Цена"
+                FROM "{table_name}"
+                WHERE "Название" = %s
+            """, (component_name,))
+            component_price = self.cursor.fetchone()
+
+            if not component_price:
+                QMessageBox.warning(self, "Ошибка", f"Компонент '{component_name}' не найден в базе данных!")
+                return
+
+            component_price = component_price[0]
+
+            # Добавляем компонент в сборку
+            self.cursor.execute(f"""
+                INSERT INTO "Компоненты_сборки" ("id_сборки", "{table_name}")
+                VALUES (%s, %s)
+            """, (build_id, component_name))
+
+            # Обновляем общую цену сборки
+            self.cursor.execute("""
+                UPDATE "Сборки"
+                SET "Общая_цена" = "Общая_цена" + %s
+                WHERE "id_сборки" = %s
+            """, (component_price, build_id))
+
+            self.db.conn.commit()
+
+            QMessageBox.information(self, "Успех", f"Компонент '{component_name}' добавлен в сборку!")
+            self.load_active_builds()  # Обновляем список сборок
+
+        except Exception as e:
+            self.db.conn.rollback()
             QMessageBox.critical(self, "Ошибка", f"Ошибка при добавлении компонента: {e}")
 
     def show_active_builds_screen(self):
