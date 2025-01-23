@@ -465,7 +465,6 @@ class MainWindow(QMainWindow):
         print("Выбор компонентов отменен. Цена сброшена, текст на кнопках сброшен.")
 
     def save_build(self, is_edit=False, build_id=None):
-        # Сохраняет новую сборку или обновляет существующую.
         if not self.is_user_logged_in():
             QMessageBox.warning(self, "Ошибка", "Вы должны войти в профиль, чтобы сохранить сборку!")
             return
@@ -477,175 +476,176 @@ class MainWindow(QMainWindow):
             return
 
         try:
+            # ================== ПРОВЕРКА СОВМЕСТИМОСТИ ==================
+            errors = []
+            required_components = [
+                ("Процессор", "Процессор"),
+                ("Материнская плата", "Материнская плата"),
+                ("Блок питания", "Блок питания")
+            ]
+
+            # Проверка наличия обязательных компонентов
+            for component, name in required_components:
+                if component not in self.selected_components or not self.selected_components[component]:
+                    errors.append(f"Не выбран обязательный компонент: {name}")
+
+            # 1. Проверка сокета процессора и материнской платы
+            if "Процессор" in self.selected_components and "Материнская плата" in self.selected_components:
+                cpu_name = self.selected_components["Процессор"].get("Название")
+                mb_name = self.selected_components["Материнская плата"].get("Название")
+
+                self.cursor.execute("""
+                    SELECT "Сокет" FROM "Процессор" WHERE "Название" = %s
+                """, (cpu_name,))
+                cpu_socket = self.cursor.fetchone()[0] if self.cursor.rowcount > 0 else None
+
+                self.cursor.execute("""
+                    SELECT "Сокет" FROM "Материнская плата" WHERE "Название" = %s
+                """, (mb_name,))
+                mb_socket = self.cursor.fetchone()[0] if self.cursor.rowcount > 0 else None
+
+                if cpu_socket != mb_socket:
+                    errors.append(
+                        f"Несовместимость сокетов: Процессор ({cpu_socket}) ≠ Материнская плата ({mb_socket})")
+
+            # 2. Проверка типа памяти ОЗУ
+            if "Оперативная память" in self.selected_components and "Материнская плата" in self.selected_components:
+                ram_name = self.selected_components["Оперативная память"].get("Название")
+                mb_name = self.selected_components["Материнская плата"].get("Название")
+
+                self.cursor.execute("""
+                    SELECT "Тип_памяти" FROM "Оперативная память" WHERE "Название" = %s
+                """, (ram_name,))
+                ram_type = self.cursor.fetchone()[0] if self.cursor.rowcount > 0 else None
+
+                self.cursor.execute("""
+                    SELECT "Тип_памяти" FROM "Материнская плата" WHERE "Название" = %s
+                """, (mb_name,))
+                mb_ram_type = self.cursor.fetchone()[0] if self.cursor.rowcount > 0 else None
+
+                if ram_type != mb_ram_type:
+                    errors.append(f"Несовместимый тип памяти: ОЗУ ({ram_type}) ≠ Материнская плата ({mb_ram_type})")
+
+            # 3. Проверка размеров корпуса
+            if "Корпус" in self.selected_components and "Материнская плата" in self.selected_components:
+                case_name = self.selected_components["Корпус"].get("Название")
+                mb_name = self.selected_components["Материнская плата"].get("Название")
+
+                self.cursor.execute("""
+                    SELECT "Размер" FROM "Корпус" WHERE "Название" = %s
+                """, (case_name,))
+                case_size = self.cursor.fetchone()[0] if self.cursor.rowcount > 0 else None
+
+                self.cursor.execute("""
+                    SELECT "Размер" FROM "Материнская плата" WHERE "Название" = %s
+                """, (mb_name,))
+                mb_size = self.cursor.fetchone()[0] if self.cursor.rowcount > 0 else None
+
+                size_order = ["Mini-ITX", "Micro-ATX", "ATX"]
+                if (case_size and mb_size and
+                        size_order.index(case_size) < size_order.index(mb_size)):
+                    errors.append(f"Корпус ({case_size}) слишком мал для материнской платы ({mb_size})")
+
+            # 4. Проверка мощности блока питания
+            total_power = 0
+            if "Процессор" in self.selected_components:
+                cpu_name = self.selected_components["Процессор"].get("Название")
+                self.cursor.execute("""
+                    SELECT "Потребляемость" FROM "Процессор" WHERE "Название" = %s
+                """, (cpu_name,))
+                result = self.cursor.fetchone()
+                total_power += float(result[0]) if result else 0
+
+            if "Видеокарта" in self.selected_components:
+                gpu_name = self.selected_components["Видеокарта"].get("Название")
+                self.cursor.execute("""
+                    SELECT "Потребляемость" FROM "Видеокарта" WHERE "Название" = %s
+                """, (gpu_name,))
+                result = self.cursor.fetchone()
+                total_power += float(result[0]) if result else 0
+
+            if "Блок питания" in self.selected_components:
+                psu_name = self.selected_components["Блок питания"].get("Название")
+                self.cursor.execute("""
+                    SELECT "Мощность" FROM "Блок питания" WHERE "Название" = %s
+                """, (psu_name,))
+                result = self.cursor.fetchone()
+                psu_power = float(result[0]) if result else 0
+
+                if psu_power < total_power * 1.2:
+                    errors.append(f"Недостаточная мощность БП: {psu_power}W < {total_power * 1.2:.0f}W")
+
+            # Если есть ошибки - отображаем и прерываем сохранение
+            if errors:
+                error_msg = "Ошибки совместимости:\n\n• " + "\n• ".join(errors)
+                QMessageBox.critical(self, "Ошибка", error_msg)
+                return
+
+            # ================== СОХРАНЕНИЕ ДАННЫХ ==================
             print(f"Начинаем сохранение сборки. Название: {build_name}, Общая цена: {self.total_price}")
+
+            # Обновление или создание сборки
             if is_edit and build_id:
-                print(f"Обновляем сборку с ID {build_id}")
-                # Обновление существующей сборки
                 self.cursor.execute("""
                     UPDATE "Сборки"
                     SET "Название_сборки" = %s, "Общая_цена" = %s
                     WHERE "id_сборки" = %s
                 """, (build_name, self.total_price, build_id))
             else:
-                print("Создаём новую сборку")
-                # Создание новой сборки
                 self.cursor.execute("""
                     INSERT INTO "Сборки" ("Название_сборки", "Общая_цена", "id_Пользователя", "Статус_сборки")
                     VALUES (%s, %s, %s, %s) RETURNING "id_сборки"
                 """, (build_name, self.total_price, self.get_user_id(), 'Активная'))
                 build_id = self.cursor.fetchone()[0]
 
-            # Обновляем компоненты сборки
+            # Обновление компонентов сборки
             for category, component in self.selected_components.items():
-                print(f"Обрабатываем категорию: {category}, компонент: {component}")
+                component_name = component.get("Название") if isinstance(component, dict) else component
+                component_name = None if not component_name or component_name == "Не выбрано" else component_name
 
-                if isinstance(component, dict):
-                    component_name = component.get("Название")
-                else:
-                    component_name = component
-
-                if not component_name:
-                    raise ValueError(f"Для категории {category} не выбран компонент.")
-
-                # Проверяем, существует ли запись для обновления
                 self.cursor.execute(f"""
                     SELECT 1 FROM "Компоненты_сборки"
                     WHERE "id_сборки" = %s AND "{category}" IS NOT NULL
                 """, (build_id,))
+
                 if self.cursor.fetchone():
-                    print(f"Обновляем компонент с категорией {category}: {component_name}")
-                    # Обновляем существующую запись
                     self.cursor.execute(f"""
                         UPDATE "Компоненты_сборки"
                         SET "{category}" = %s
                         WHERE "id_сборки" = %s
                     """, (component_name, build_id))
                 else:
-                    print(f"Добавляем новый компонент с категорией {category}: {component_name}")
-                    # Добавляем новую запись
                     self.cursor.execute(f"""
                         INSERT INTO "Компоненты_сборки" ("id_сборки", "{category}")
                         VALUES (%s, %s)
                     """, (build_id, component_name))
 
-            # Сохраняем изменения в базе данных
-            print("Сохраняем изменения в базе данных...")
             self.db.conn.commit()
-
             QMessageBox.information(self, "Успех", "Сборка успешно сохранена!")
             self.show_active_builds_screen()
 
-        except ValueError as ve:
-            print(f"Ошибка: {ve}")
-            QMessageBox.warning(self, "Ошибка", str(ve))
         except Exception as e:
-            print(f"Ошибка при сохранении сборки: {e}")
             self.db.conn.rollback()
-            QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении сборки: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении сборки:\n{str(e)}")
+            print(f"Ошибка сохранения: {e}")
 
-    def delete_build(self, build_id):
-        # Удаление сборки из базы данных
-        try:
-            # Удаляем сборку по ID
-            self.cursor.execute(
-                """
-                DELETE FROM "Сборки" 
-                WHERE "id_сборки" = %s
-                """,
-                (build_id,)
-            )
-            self.db.conn.commit()
-            QMessageBox.information(self, "Успех", "Сборка успешно удалена.")
-            self.show_active_builds_screen()  # Перезагружает список активных сборок
-        except Exception as e:
-            self.db.conn.rollback()  # Откатываем изменения в случае ошибки
-            QMessageBox.critical(self, "Ошибка", f"Ошибка при удалении сборки: {e}")
+    def update_build_components(self, build_id, updated_components):
+        self.cursor.execute("""
+            UPDATE "Компоненты_сборки"
+            SET 
+                "Процессор" = %s, 
+                "Видеокарта" = %s, 
+                "Материнская плата" = %s, 
+                "Корпус" = %s, 
+                "Охлаждение процессора" = %s, 
+                "Оперативная память" = %s, 
+                "Накопитель" = %s, 
+                "Блок питания" = %s, 
+                "Доп. детали" = %s
+            WHERE "id_сборки" = %s
+        """, (*updated_components, build_id))
 
-    def show_finished_builds(self):
-        # Отображение завершённых сборок
-        try:
-            # Очищаем список перед загрузкой
-            self.finished_builds_list.clear()
-
-            # Получаем ID текущего пользователя
-            user_id = self.get_user_id()
-
-            # Проверяем, авторизован ли пользователь
-            if user_id is None:  # Предполагаем, что None — это неавторизованный пользователь
-                self.finished_builds_list.addItem("Вы не авторизованы!")
-                return
-
-            # Выполняем запрос к базе данных для получения завершённых сборок
-            self.cursor.execute("""
-                SELECT "Название_сборки", "Общая_цена"
-                FROM "Сборки"
-                WHERE "Статус_сборки" = 'Завершена' AND "id_Пользователя" = %s
-            """, (user_id,))
-            builds = self.cursor.fetchall()
-
-            # Если сборок нет, отображаем сообщение
-            if not builds:
-                self.finished_builds_list.addItem("У вас нет завершённых сборок.")
-                return
-
-            # Добавляем завершённые сборки в список
-            for build_name, total_price in builds:
-                self.finished_builds_list.addItem(f"{build_name} — {total_price} руб.")
-
-        except Exception as e:
-            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить завершённые сборки: {e}")
-
-    def edit_build(self, build_id):
-        # Открывает экран для редактирования сборки.
-        try:
-            self.cursor.execute("""
-                SELECT "Название_сборки", "Общая_цена"
-                FROM "Сборки"
-                WHERE "id_сборки" = %s
-            """, (build_id,))
-            build_data = self.cursor.fetchone()
-
-            if not build_data:
-                QMessageBox.warning(self, "Ошибка", "Сборка не найдена.")
-                return
-
-            build_name, total_price = build_data
-
-            self.cursor.execute("""
-                SELECT "Процессор", "Видеокарта", "Материнская плата", "Корпус",
-                       "Охлаждение процессора", "Оперативная память", "Накопитель",
-                       "Блок питания", "Доп. детали"
-                FROM "Компоненты_сборки"
-                WHERE "id_сборки" = %s
-            """, (build_id,))
-            component_data = self.cursor.fetchone()
-
-            categories = [
-                "Процессор", "Видеокарта", "Материнская плата", "Корпус",
-                "Охлаждение процессора", "Оперативная память", "Накопитель",
-                "Блок питания", "Доп. детали",
-            ]
-
-            self.selected_components = {
-                category: component for category, component in zip(categories, component_data) if component
-            }
-
-            edit_screen = self.create_new_build_screen(
-                build_name=build_name,
-                total_price=total_price,
-                is_edit=True,
-                build_id=build_id
-            )
-
-            self.central_widget.addWidget(edit_screen)
-            self.central_widget.setCurrentWidget(edit_screen)
-
-            for category, component in self.selected_components.items():
-                if category in self.component_buttons:
-                    self.component_buttons[category].setText(f"{category}\n{component}")
-
-        except Exception as e:
-            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить сборку: {e}")
+        self.db.conn.commit()
 
     def create_edit_build_screen(self, build_id, build_name="", total_price=0):
         print(f"Создаём экран редактирования для сборки: {build_name} (ID: {build_id})")  # Отладка
@@ -761,34 +761,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить изменения: {e}")
 
-    def select_component_from_list(self, category):
-        # Открываем экран для выбора компонента из базы данных
-        self.cursor.execute(f"""
-            SELECT "Название", "Описание", "Цена"
-            FROM "{category}"  
-        """)
-        components = self.cursor.fetchall()
-
-        # Создаем экран для выбора компонента
-        selection_screen = QWidget()
-        layout = QVBoxLayout()
-        selection_screen.setLayout(layout)
-
-        # Заголовок для категории
-        category_label = QLabel(f"Выберите {category}")
-        layout.addWidget(category_label)
-
-        # Список компонентов
-        for component_name, description, price in components:
-            button = QPushButton(f"{component_name} — {price} руб.")
-            button.clicked.connect(
-                lambda _, comp_name=component_name: self.update_selected_component(comp_name, category))
-            layout.addWidget(button)
-
-        # Добавляем экран в центральный виджет и показываем
-        self.central_widget.addWidget(selection_screen)
-        self.central_widget.setCurrentWidget(selection_screen)
-
     def update_selected_component(self, component_name, category):
         # Обновляем выбранный компонент для категории
         self.selected_components[category] = component_name
@@ -872,111 +844,127 @@ class MainWindow(QMainWindow):
         # Обновление общей цены сборки
         self.build_price_label.setText(f"Цена: {self.total_price} руб.")
 
-    def show_components_for_category(self, category):
-        # Отображение компонентов для выбранной категории
-        self.current_category = category
+    def check_compatibility(self, selected_component, category):
+        """
+        Проверяет совместимость выбранного компонента с другими комплектующими.
 
+        :param selected_component: Название выбранного компонента (строка)
+        :param category: Категория выбранного компонента (строка)
+        :return: Список совместимых компонентов для других категорий
+        """
         try:
-            # Проверяем, подключена ли база данных
-            if self.db.conn.closed:
-                self.db = Database()  # Повторное подключение
-                self.cursor = self.db.cursor
+            if category == "Процессор":
+                # Получаем совместимые материнские платы по сокету процессора
+                self.cursor.execute("""
+                    SELECT m."Название"
+                    FROM "Материнская плата" m
+                    JOIN "Процессор" p ON m."Сокет" = p."Сокет"
+                    WHERE p."Название" = %s
+                """, (selected_component,))
+                compatible_motherboards = [row[0] for row in self.cursor.fetchall()]
+                self.component_buttons["Материнская плата"].setEnabled(True)
+                self.component_buttons["Материнская плата"].setText("Материнская плата\nВыберите")
+                return compatible_motherboards
 
-            # Сопоставление категорий с таблицами и характеристиками
-            category_mapping = {
-                "Видеокарта": {
-                    "table": "Видеокарта",
-                    "fields": ["Название", "Цена", "Описание"]
-                },
-                "Процессор": {
-                    "table": "Процессор",
-                    "fields": ["Название", "Цена", "Описание", "Сокет"]
-                },
-                "Материнская плата": {
-                    "table": "Материнская плата",
-                    "fields": ["Название", "Цена", "Описание", "Сокет", "Размер"]
-                },
-                "Корпус": {
-                    "table": "Корпус",
-                    "fields": ["Название", "Цена", "Описание", "Размер"]
-                },
-                "Охлаждение процессора": {
-                    "table": "Охлаждение процессора",
-                    "fields": ["Название", "Цена", "Описание"]
-                },
-                "Оперативная память": {
-                    "table": "Оперативная память",
-                    "fields": ["Название", "Цена", "Описание", "Тип_памяти"]
-                },
-                "Накопитель": {
-                    "table": "Накопитель",
-                    "fields": ["Название", "Цена", "Описание", "Объём"]
-                },
-                "Блок питания": {
-                    "table": "Блок питания",
-                    "fields": ["Название", "Цена", "Описание", "Мощность"]
-                },
-                "Доп. детали": {
-                    "table": "Доп. детали",
-                    "fields": ["Название", "Цена", "Описание"]
-                }
-            }
+            elif category == "Материнская плата":
+                # Получаем совместимые процессоры по сокету материнской платы
+                self.cursor.execute("""
+                    SELECT p."Название"
+                    FROM "Процессор" p
+                    JOIN "Материнская плата" m ON p."Сокет" = m."Сокет"
+                    WHERE m."Название" = %s
+                """, (selected_component,))
+                compatible_cpus = [row[0] for row in self.cursor.fetchall()]
+                self.component_buttons["Процессор"].setEnabled(True)
+                self.component_buttons["Процессор"].setText("Процессор\nВыберите")
+                return compatible_cpus
 
-            # Получаем информацию для выбранной категории
-            category_info = category_mapping.get(category)
-            if not category_info:
-                print(f"Категория '{category}' не найдена в сопоставлении.")
-                self.new_build_list.clear()
-                self.new_build_list.addItem(QListWidgetItem("Категория не найдена."))
-                return
-
-            table_name = category_info["table"]
-            fields = category_info["fields"]
-
-            # Выполняем запрос к нужной таблице
-            query = f"""
-                SELECT {', '.join(fields)}
-                FROM "{table_name}"
-            """
-            self.cursor.execute(query)
-            components = self.cursor.fetchall()
-
-            # Проверяем, есть ли данные
-            if not components:
-                print(f"Нет данных для категории '{category}'.")
-                self.new_build_list.clear()
-                self.new_build_list.addItem(QListWidgetItem("Нет компонентов в этой категории."))
-                return
-
-            # Очищаем список и добавляем компоненты
-            self.new_build_list.clear()
-            for component in components:
-                component_data = dict(zip(fields, component))
-
-                # Преобразуем цену из Decimal в float, если нужно
-                price = float(component_data["Цена"])
-
-                # Формируем текст элемента для списка
-                item_text = f"{category}: {component_data['Название']}\nЦена: {price} руб.\nОписание: {component_data['Описание']}"
-                for field in fields:
-                    if field not in ["Название", "Цена", "Описание"]:
-                        item_text += f"\n{field}: {component_data[field]}"
-
-                list_item = QListWidgetItem(item_text)
-                self.new_build_list.addItem(list_item)
-
-                # Привязываем данные компонента к элементу списка для использования при выборе
-                list_item.setData(Qt.UserRole, component_data)
-
-            # Отключаем старые соединения и подключаем обработчик выбора компонента
-            try:
-                self.new_build_list.itemClicked.disconnect()
-            except TypeError:
-                pass
-            self.new_build_list.itemClicked.connect(self.select_component)
+            else:
+                return []
 
         except Exception as e:
-            print(f"Ошибка при загрузке компонентов: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при проверке совместимости: {e}")
+            return []
+
+    def show_components_for_category(self, category):
+        self.current_category = category
+        try:
+            if self.db.conn.closed:
+                self.db = Database()
+                self.cursor = self.db.cursor
+
+            # Базовые условия для фильтрации
+            filters = []
+            params = []
+
+            # Процессор ↔ Материнская плата (сокет)
+            if category == "Материнская плата" and "Процессор" in self.selected_components:
+                cpu_name = self.selected_components["Процессор"]["Название"]
+                self.cursor.execute("SELECT \"Сокет\" FROM \"Процессор\" WHERE \"Название\" = %s", (cpu_name,))
+                socket = self.cursor.fetchone()[0]
+                filters.append("\"Сокет\" = %s")
+                params.append(socket)
+
+            # Материнская плата ↔ Процессор (обратная проверка)
+            elif category == "Процессор" and "Материнская плата" in self.selected_components:
+                mb_name = self.selected_components["Материнская плата"]["Название"]
+                self.cursor.execute("SELECT \"Сокет\" FROM \"Материнская плата\" WHERE \"Название\" = %s", (mb_name,))
+                socket = self.cursor.fetchone()[0]
+                filters.append("\"Сокет\" = %s")
+                params.append(socket)
+
+            # Материнская плата ↔ Оперативная память (тип памяти)
+            if category == "Оперативная память" and "Материнская плата" in self.selected_components:
+                mb_name = self.selected_components["Материнская плата"]["Название"]
+                self.cursor.execute("SELECT \"Тип_памяти\" FROM \"Материнская плата\" WHERE \"Название\" = %s",
+                                    (mb_name,))
+                mem_type = self.cursor.fetchone()[0]
+                filters.append("\"Тип_памяти\" = %s")
+                params.append(mem_type)
+
+            # Корпус ↔ Материнская плата (размер)
+            if category == "Материнская плата" and "Корпус" in self.selected_components:
+                case_name = self.selected_components["Корпус"]["Название"]
+                self.cursor.execute("SELECT \"Размер\" FROM \"Корпус\" WHERE \"Название\" = %s", (case_name,))
+                case_size = self.cursor.fetchone()[0]
+                filters.append("\"Размер\" <= %s")
+                params.append(case_size)
+
+            # Формируем SQL-запрос
+            category_mapping = {
+                "Видеокарта": {"table": "Видеокарта", "fields": ["Название", "Потребляемость", "Цена"]},
+                "Процессор": {"table": "Процессор", "fields": ["Название", "Сокет", "Потребляемость", "Цена"]},
+                "Материнская плата": {"table": "Материнская плата",
+                                      "fields": ["Название", "Сокет", "Тип_памяти", "Размер", "Цена"]},
+                "Корпус": {"table": "Корпус", "fields": ["Название", "Размер", "Цена"]},
+                "Оперативная память": {"table": "Оперативная память", "fields": ["Название", "Тип_памяти", "Цена"]},
+                "Блок питания": {"table": "Блок питания", "fields": ["Название", "Мощность", "Цена"]},
+            }
+
+            table_info = category_mapping.get(category)
+            if not table_info:
+                self.new_build_list.addItem("Категория не найдена")
+                return
+
+            where_clause = "WHERE " + " AND ".join(filters) if filters else ""
+            query = f'SELECT {", ".join(table_info["fields"])} FROM "{table_info["table"]}" {where_clause}'
+
+            self.cursor.execute(query, params)
+            components = self.cursor.fetchall()
+
+            # Отображение компонентов
+            self.new_build_list.clear()
+            for comp in components:
+                component_data = dict(zip(table_info["fields"], comp))
+                item_text = f"{category}: {component_data['Название']}\n"
+                for key, value in component_data.items():
+                    if key != "Название":
+                        item_text += f"{key}: {value}\n"
+                self.new_build_list.addItem(QListWidgetItem(item_text.strip()))
+
+        except Exception as e:
+            print(f"Ошибка: {str(e)}")
+            QMessageBox.critical(self, "Ошибка", f"Ошибка загрузки компонентов: {str(e)}")
 
     def create_components_screen(self):
         # Создаёт экран склада комплектующих
