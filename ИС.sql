@@ -3,7 +3,7 @@
 BEGIN;
 
 
-CREATE TABLE IF NOT EXISTS public."Блоки_питания"
+CREATE TABLE IF NOT EXISTS public."Блок питания"
 (
     "Название" character varying(255) COLLATE pg_catalog."default" NOT NULL,
     "Мощность" integer NOT NULL,
@@ -12,15 +12,16 @@ CREATE TABLE IF NOT EXISTS public."Блоки_питания"
     CONSTRAINT "Блоки_питания_pkey" PRIMARY KEY ("Название")
 );
 
-CREATE TABLE IF NOT EXISTS public."Видеокарты"
+CREATE TABLE IF NOT EXISTS public."Видеокарта"
 (
     "Название" character varying(255) COLLATE pg_catalog."default" NOT NULL,
     "Описание" text COLLATE pg_catalog."default" NOT NULL,
     "Цена" numeric(8, 2) NOT NULL,
+    "Потребляемость" numeric(4, 0),
     CONSTRAINT "Видеокарты_pkey" PRIMARY KEY ("Название")
 );
 
-CREATE TABLE IF NOT EXISTS public."Доп детали"
+CREATE TABLE IF NOT EXISTS public."Доп. детали"
 (
     "Название" character varying(255) COLLATE pg_catalog."default" NOT NULL,
     "Описание" text COLLATE pg_catalog."default" NOT NULL,
@@ -69,10 +70,11 @@ CREATE TABLE IF NOT EXISTS public."Материнская плата"
     "Описание" text COLLATE pg_catalog."default" NOT NULL,
     "Цена" numeric(8, 2) NOT NULL,
     "Размер" character varying(30) COLLATE pg_catalog."default",
+    "Тип_памяти" character varying(10) COLLATE pg_catalog."default",
     CONSTRAINT "Материнская плата_pkey" PRIMARY KEY ("Название")
 );
 
-CREATE TABLE IF NOT EXISTS public."Накопители"
+CREATE TABLE IF NOT EXISTS public."Накопитель"
 (
     "Название" character varying(255) COLLATE pg_catalog."default" NOT NULL,
     "Объём" character varying(100) COLLATE pg_catalog."default" NOT NULL,
@@ -108,12 +110,13 @@ CREATE TABLE IF NOT EXISTS public."Пользователи"
     CONSTRAINT "уникальный_никнейм" UNIQUE ("Никнейм")
 );
 
-CREATE TABLE IF NOT EXISTS public."Процессоры"
+CREATE TABLE IF NOT EXISTS public."Процессор"
 (
     "Название" character varying(255) COLLATE pg_catalog."default" NOT NULL,
     "Описание" text COLLATE pg_catalog."default" NOT NULL,
     "Сокет" character varying(100) COLLATE pg_catalog."default" NOT NULL,
-    "Цена" numeric(8, 2) NOT NULL,
+    "Цена" numeric(10, 2) NOT NULL,
+    "Потребляемость" numeric(4, 0),
     CONSTRAINT "Процессоры_pkey" PRIMARY KEY ("Название")
 );
 
@@ -131,21 +134,21 @@ CREATE TABLE IF NOT EXISTS public."Сборки"
 
 ALTER TABLE IF EXISTS public."Компоненты_сборки"
     ADD CONSTRAINT "fk_блок_питания" FOREIGN KEY ("Блок питания")
-    REFERENCES public."Блоки_питания" ("Название") MATCH SIMPLE
+    REFERENCES public."Блок питания" ("Название") MATCH SIMPLE
     ON UPDATE NO ACTION
     ON DELETE NO ACTION;
 
 
 ALTER TABLE IF EXISTS public."Компоненты_сборки"
     ADD CONSTRAINT "fk_видеокарта" FOREIGN KEY ("Видеокарта")
-    REFERENCES public."Видеокарты" ("Название") MATCH SIMPLE
+    REFERENCES public."Видеокарта" ("Название") MATCH SIMPLE
     ON UPDATE NO ACTION
     ON DELETE NO ACTION;
 
 
 ALTER TABLE IF EXISTS public."Компоненты_сборки"
     ADD CONSTRAINT "fk_доп_детали" FOREIGN KEY ("Доп. детали")
-    REFERENCES public."Доп детали" ("Название") MATCH SIMPLE
+    REFERENCES public."Доп. детали" ("Название") MATCH SIMPLE
     ON UPDATE NO ACTION
     ON DELETE NO ACTION;
 
@@ -166,7 +169,7 @@ ALTER TABLE IF EXISTS public."Компоненты_сборки"
 
 ALTER TABLE IF EXISTS public."Компоненты_сборки"
     ADD CONSTRAINT "fk_накопитель" FOREIGN KEY ("Накопитель")
-    REFERENCES public."Накопители" ("Название") MATCH SIMPLE
+    REFERENCES public."Накопитель" ("Название") MATCH SIMPLE
     ON UPDATE NO ACTION
     ON DELETE NO ACTION;
 
@@ -187,7 +190,7 @@ ALTER TABLE IF EXISTS public."Компоненты_сборки"
 
 ALTER TABLE IF EXISTS public."Компоненты_сборки"
     ADD CONSTRAINT "fk_процессор" FOREIGN KEY ("Процессор")
-    REFERENCES public."Процессоры" ("Название") MATCH SIMPLE
+    REFERENCES public."Процессор" ("Название") MATCH SIMPLE
     ON UPDATE NO ACTION
     ON DELETE NO ACTION;
 

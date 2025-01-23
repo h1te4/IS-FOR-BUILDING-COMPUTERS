@@ -629,6 +629,37 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении сборки:\n{str(e)}")
             print(f"Ошибка сохранения: {e}")
 
+    def check_psu_compatibility(self):
+        try:
+            total_power = 0
+            # Суммируем потребление всех компонентов
+            for category in ["Процессор", "Видеокарта", "Охлаждение процессора"]:
+                if category in self.selected_components:
+                    comp_name = self.selected_components[category].get("Название")
+                    self.cursor.execute(f"""
+                        SELECT "Потребляемость" FROM "{category}" 
+                        WHERE "Название" = %s
+                    """, (comp_name,))
+                    result = self.cursor.fetchone()
+                    total_power += float(result[0]) if result else 0
+
+            # Проверка запаса мощности
+            if "Блок питания" in self.selected_components:
+                psu_name = self.selected_components["Блок питания"].get("Название")
+                self.cursor.execute("""
+                    SELECT "Мощность" FROM "Блок питания" 
+                    WHERE "Название" = %s
+                """, (psu_name,))
+                psu_power = float(self.cursor.fetchone()[0])
+
+                if psu_power < total_power * 1.2:
+                    return f"Мощность БП недостаточна: {psu_power}W < {total_power * 1.2:.0f}W"
+
+            return None
+        except Exception as e:
+            print(f"Ошибка проверки питания: {str(e)}")
+            return "Ошибка расчета мощности"
+
     def update_build_components(self, build_id, updated_components):
         self.cursor.execute("""
             UPDATE "Компоненты_сборки"
@@ -934,13 +965,15 @@ class MainWindow(QMainWindow):
             category_mapping = {
                 "Видеокарта": {"table": "Видеокарта", "fields": ["Название", "Потребляемость", "Цена"]},
                 "Процессор": {"table": "Процессор", "fields": ["Название", "Сокет", "Потребляемость", "Цена"]},
-                "Материнская плата": {"table": "Материнская плата",
-                                      "fields": ["Название", "Сокет", "Тип_памяти", "Размер", "Цена"]},
+                "Материнская плата": {"table": "Материнская плата","fields": ["Название", "Сокет", "Тип_памяти", "Размер", "Цена"]},
                 "Корпус": {"table": "Корпус", "fields": ["Название", "Размер", "Цена"]},
                 "Оперативная память": {"table": "Оперативная память", "fields": ["Название", "Тип_памяти", "Цена"]},
                 "Блок питания": {"table": "Блок питания", "fields": ["Название", "Мощность", "Цена"]},
+                "Охлаждение процессора": {"table": "Охлаждение процессора", "fields": ["Название", "Цена", "Описание"]},
+                "Накопитель": {"table": "Накопитель", "fields": ["Название", "Цена", "Описание", "Объём"]},
+                "Доп. детали": {"table": "Доп. детали", "fields": ["Название", "Цена", "Описание"]}
             }
-
+            
             table_info = category_mapping.get(category)
             if not table_info:
                 self.new_build_list.addItem("Категория не найдена")
