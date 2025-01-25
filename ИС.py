@@ -360,45 +360,37 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось завершить сборку: {e}")
 
-    def create_new_build_screen(self, build_name="", total_price=0, is_edit=False, build_id=None):
-        # Создаёт экран для новой или редактируемой сборки.
-        # Создание виджета и основного макета
+    def create_new_build_screen(self):
+        # Создание экрана для новой сборки
+        self.selected_components = {}
+        self.total_price = 0
+        self.current_category = None
+
         screen = QWidget()
         layout = QVBoxLayout()
 
-        # Верхняя панель
+        # Верхняя панель (назад, заголовок, сохранить, отменить, профиль)
         top_bar = QHBoxLayout()
-
-        # Кнопка "Назад"
         back_button = QPushButton()
         back_button.setIcon(QIcon("back.png"))
         back_button.setFixedSize(60, 40)
         back_button.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.main_menu))
-
-        # Заголовок
-        title_label = QLabel("Редактирование сборки" if is_edit else "Новая сборка")
-        title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
-
-        # Кнопка "Сохранить"
-        save_btn = QPushButton("Сохранить")
-        save_btn.clicked.connect(lambda: self.save_build(is_edit=is_edit, build_id=build_id))
-
-        # Кнопка "Отменить"
-        cancel_btn = QPushButton("Отменить")
-        cancel_btn.clicked.connect(self.cancel_selection)
-
-        # Кнопка "Профиль"
-        profile_btn = QPushButton()
-        profile_btn.setIcon(QIcon("man.png"))
-        profile_btn.setFixedSize(50, 50)
-        profile_btn.clicked.connect(self.show_profile_screen)
-
-        # Добавление элементов верхней панели
         top_bar.addWidget(back_button)
+
+        title_label = QLabel("Новая сборка")
+        title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
         top_bar.addWidget(title_label)
         top_bar.addStretch()
+
+        save_btn = QPushButton("Сохранить")
+        save_btn.clicked.connect(lambda: self.save_build())
         top_bar.addWidget(save_btn)
+
+        cancel_btn = QPushButton("Отменить")
+        cancel_btn.clicked.connect(self.cancel_selection)
         top_bar.addWidget(cancel_btn)
+
+        profile_btn = self.create_profile_button()
         top_bar.addWidget(profile_btn)
         layout.addLayout(top_bar)
 
@@ -418,7 +410,6 @@ class MainWindow(QMainWindow):
             ("Доп. детали", "Доп. детали"),
         ]
 
-        # Кнопки для выбора категорий
         for label, category in components:
             btn = QPushButton(label)
             btn.setFixedHeight(40)
@@ -428,39 +419,274 @@ class MainWindow(QMainWindow):
 
         layout.addLayout(components_layout)
 
-        # Список компонентов для сборки
+        # Список компонентов
         self.new_build_list = QListWidget()
         self.new_build_list.itemDoubleClicked.connect(self.select_component)
         layout.addWidget(self.new_build_list)
 
-        # Метка для отображения цены
-        self.build_price_label = QLabel(f"Цена: {total_price} руб.")
+        # Метка цены
+        self.build_price_label = QLabel(f"Цена: {self.total_price} руб.")
         layout.addWidget(self.build_price_label)
 
-        # Нижняя панель с названием сборки
+        # Поле названия сборки
         bottom_bar = QHBoxLayout()
         new_build_label = QLabel("Название сборки: ")
-        self.build_name_input = QLineEdit(build_name)
+        self.build_name_input = QLineEdit()
         self.build_name_input.setPlaceholderText("Введите название сборки...")
         bottom_bar.addWidget(new_build_label)
         bottom_bar.addWidget(self.build_name_input)
-
         layout.addLayout(bottom_bar)
+
         screen.setLayout(layout)
         return screen
 
+    def create_edit_build_screen(self, build_id):
+        # Создание экрана для редактирования существующей сборки
+        self.current_category = None
+        screen = QWidget()
+        layout = QVBoxLayout()
+
+        try:
+            # Загрузка данных сборки из БД
+            self.cursor.execute("""
+                SELECT "Название_сборки", "Общая_цена" 
+                FROM "Сборки" 
+                WHERE "id_сборки" = %s
+            """, (build_id,))
+            build_data = self.cursor.fetchone()
+
+            if not build_data:
+                raise ValueError("Сборка не найдена")
+
+            build_name, total_price = build_data
+            self.total_price = total_price
+            self.build_id = build_id
+
+            # Загрузка компонентов сборки
+            self.cursor.execute("""
+                SELECT 
+                    "Процессор", 
+                    "Видеокарта", 
+                    "Материнская плата", 
+                    "Корпус",
+                    "Охлаждение процессора", 
+                    "Оперативная память", 
+                    "Накопитель",
+                    "Блок питания", 
+                    "Доп. детали"
+                FROM "Компоненты_сборки"
+                WHERE "id_сборки" = %s
+            """, (build_id,))
+            components = self.cursor.fetchall()
+
+            # Инициализация выбранных компонентов
+            self.selected_components = {}
+            categories = [
+                "Процессор", "Видеокарта", "Материнская плата", "Корпус",
+                "Охлаждение процессора", "Оперативная память", "Накопитель",
+                "Блок питания", "Доп. детали"
+            ]
+
+            for row in components:
+                for i, category in enumerate(categories):
+                    component_name = row[i]
+                    if component_name:
+                        self.cursor.execute(f"""
+                            SELECT "Цена" FROM "{category}"
+                            WHERE "Название" = %s
+                        """, (component_name,))
+                        price = self.cursor.fetchone()[0]
+                        self.selected_components[category] = {
+                            "Название": component_name,
+                            "Цена": price
+                        }
+
+            # Верхняя панель
+            top_bar = QHBoxLayout()
+            back_button = QPushButton()
+            back_button.setIcon(QIcon("back.png"))
+            back_button.setFixedSize(60, 40)
+            back_button.clicked.connect(self.show_active_builds_screen)
+            top_bar.addWidget(back_button)
+
+            title_label = QLabel("Редактирование сборки")
+            title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
+            top_bar.addWidget(title_label)
+            top_bar.addStretch()
+
+            save_btn = QPushButton("Сохранить")
+            save_btn.clicked.connect(lambda: self.save_build(build_id=build_id))
+            top_bar.addWidget(save_btn)
+
+            cancel_btn = QPushButton("Отменить")
+            cancel_btn.clicked.connect(self.cancel_selection)
+            top_bar.addWidget(cancel_btn)
+
+            profile_btn = self.create_profile_button()
+            top_bar.addWidget(profile_btn)
+            layout.addLayout(top_bar)
+
+            # Секция выбора компонентов
+            components_layout = QHBoxLayout()
+            self.component_buttons = {}
+
+            components = [
+                ("Видеокарта", "Видеокарта"),
+                ("Процессор", "Процессор"),
+                ("Мат. плата", "Материнская плата"),
+                ("Корпус", "Корпус"),
+                ("Охлаждение процессора", "Охлаждение процессора"),
+                ("Оперативная память", "Оперативная память"),
+                ("Накопитель", "Накопитель"),
+                ("Блок питания", "Блок питания"),
+                ("Доп. детали", "Доп. детали"),
+            ]
+
+            for label, category in components:
+                btn = QPushButton(label)
+                btn.setFixedHeight(40)
+                if self.selected_components.get(category):
+                    component_name = self.selected_components[category].get("Название", "")
+                    btn.setText(f"{label}\n{component_name}")
+                btn.clicked.connect(lambda checked, c=category: self.show_components_for_category(c))
+                components_layout.addWidget(btn)
+                self.component_buttons[category] = btn
+
+            layout.addLayout(components_layout)
+
+            # Список компонентов
+            self.new_build_list = QListWidget()
+            self.new_build_list.itemDoubleClicked.connect(self.select_component)
+            layout.addWidget(self.new_build_list)
+
+            # Метка цены
+            self.build_price_label = QLabel(f"Цена: {self.total_price} руб.")
+            layout.addWidget(self.build_price_label)
+
+            # Поле названия сборки
+            bottom_bar = QHBoxLayout()
+            new_build_label = QLabel("Название сборки: ")
+            self.build_name_input = QLineEdit(build_name)
+            bottom_bar.addWidget(new_build_label)
+            bottom_bar.addWidget(self.build_name_input)
+            layout.addLayout(bottom_bar)
+
+            screen.setLayout(layout)
+            return screen
+
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка загрузки: {str(e)}")
+            return screen
+
+    def edit_build(self, build_id):
+        """Открывает экран для редактирования сборки."""
+        try:
+            edit_screen = self.create_edit_build_screen(build_id)
+            self.central_widget.addWidget(edit_screen)
+            self.central_widget.setCurrentWidget(edit_screen)
+
+            # Получаем основную информацию о сборке
+            self.cursor.execute("""
+                SELECT "Название_сборки", "Общая_цена"
+                FROM "Сборки"
+                WHERE "id_сборки" = %s
+            """, (build_id,))
+            build_data = self.cursor.fetchone()
+
+            if not build_data:
+                QMessageBox.warning(self, "Ошибка", "Сборка не найдена.")
+                return
+
+            build_name, total_price = build_data
+            self.total_price = total_price
+
+            # Получение ВСЕХ компонентов сборки (всех записей)
+            self.cursor.execute("""
+                SELECT 
+                    "Процессор", 
+                    "Видеокарта", 
+                    "Материнская плата", 
+                    "Корпус",
+                    "Охлаждение процессора", 
+                    "Оперативная память", 
+                    "Накопитель",
+                    "Блок питания", 
+                    "Доп. детали"
+                FROM "Компоненты_сборки"
+                WHERE "id_сборки" = %s
+            """, (build_id,))
+            components = self.cursor.fetchall()
+
+            if not components:
+                QMessageBox.warning(self, "Ошибка", "Компоненты сборки не найдены.")
+                return
+
+            # Собираем все компоненты из всех записей
+            categories = [
+                "Процессор", "Видеокарта", "Материнская плата", "Корпус",
+                "Охлаждение процессора", "Оперативная память", "Накопитель",
+                "Блок питания", "Доп. детали",
+            ]
+            self.selected_components = {}
+
+            for row in components:
+                for i, category in enumerate(categories):
+                    component_name = row[i]
+                    if component_name:
+                        # Получаем цену компонента
+                        self.cursor.execute(f"""
+                            SELECT "Цена" FROM "{category}"
+                            WHERE "Название" = %s
+                        """, (component_name,))
+                        price = self.cursor.fetchone()[0]
+
+                        # Обновляем выбранные компоненты
+                        self.selected_components[category] = {
+                            "Название": component_name,
+                            "Цена": price
+                        }
+
+            # Создание экрана редактирования
+            edit_screen = self.create_new_build_screen(
+                build_name=build_name,
+                total_price=total_price,
+                is_edit=True,
+                build_id=build_id
+            )
+            self.central_widget.addWidget(edit_screen)
+            self.central_widget.setCurrentWidget(edit_screen)
+
+            # Обновляем кнопки с компонентами
+            for category, component in self.selected_components.items():
+                if category in self.component_buttons:
+                    self.component_buttons[category].setText(f"{category}\n{component['Название']}")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить сборку: {e}")
+
     def cancel_selection(self):
-        # Очищаем все выбранные компоненты
-        self.selected_components.clear()  # Очищаем словарь выбранных компонентов
-        self.new_build_list.clear()  # Очищаем список компонентов
+        """Сбрасывает выбранные компоненты и обновляет интерфейс"""
+        self.selected_components = {}
+        self.total_price = 0
 
-        # Сбрасываем цену
-        self.total_price = 0  # Устанавливаем цену в 0
-        self.build_price_label.setText(f"Цена: {self.total_price} руб.")  # Обновляем текст метки с ценой
-
-        # Сбрасываем текст на кнопках категорий
+        # Сбрасываем текст кнопок категорий
         for category, button in self.component_buttons.items():
-            button.setText(category)  # Восстанавливаем исходный текст кнопок категорий
+            button.setText(category.split()[-1])  # Удаляем название компонента
+
+        self.build_price_label.setText(f"Цена: {self.total_price} руб.")
+
+    def cancel_selection(self):
+        # Очистка все выбранные компоненты
+        self.selected_components.clear()  # Очистка словаря выбранных компонентов
+        self.new_build_list.clear()  # Очистка списока компонентов
+
+        # Сброс цены
+        self.total_price = 0
+        self.build_price_label.setText(f"Цена: {self.total_price} руб.")  # Обновление текста метки с ценой
+
+        # Сбрасывание текста на кнопках категорий
+        for category, button in self.component_buttons.items():
+            button.setText(category)  # Восстановление исходного текста кнопок категорий
 
         print("Выбор компонентов отменен. Цена сброшена, текст на кнопках сброшен.")
 
@@ -476,7 +702,7 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            # ================== ПРОВЕРКА СОВМЕСТИМОСТИ ==================
+            # Проверка совместимости
             errors = []
             required_components = [
                 ("Процессор", "Процессор"),
@@ -489,7 +715,7 @@ class MainWindow(QMainWindow):
                 if component not in self.selected_components or not self.selected_components[component]:
                     errors.append(f"Не выбран обязательный компонент: {name}")
 
-            # 1. Проверка сокета процессора и материнской платы
+            # Проверка сокета процессора и материнской платы
             if "Процессор" in self.selected_components and "Материнская плата" in self.selected_components:
                 cpu_name = self.selected_components["Процессор"].get("Название")
                 mb_name = self.selected_components["Материнская плата"].get("Название")
@@ -508,7 +734,7 @@ class MainWindow(QMainWindow):
                     errors.append(
                         f"Несовместимость сокетов: Процессор ({cpu_socket}) ≠ Материнская плата ({mb_socket})")
 
-            # 2. Проверка типа памяти ОЗУ
+            # Проверка типа памяти ОЗУ
             if "Оперативная память" in self.selected_components and "Материнская плата" in self.selected_components:
                 ram_name = self.selected_components["Оперативная память"].get("Название")
                 mb_name = self.selected_components["Материнская плата"].get("Название")
@@ -526,7 +752,7 @@ class MainWindow(QMainWindow):
                 if ram_type != mb_ram_type:
                     errors.append(f"Несовместимый тип памяти: ОЗУ ({ram_type}) ≠ Материнская плата ({mb_ram_type})")
 
-            # 3. Проверка размеров корпуса
+            # Проверка размеров корпуса
             if "Корпус" in self.selected_components and "Материнская плата" in self.selected_components:
                 case_name = self.selected_components["Корпус"].get("Название")
                 mb_name = self.selected_components["Материнская плата"].get("Название")
@@ -541,10 +767,93 @@ class MainWindow(QMainWindow):
                 """, (mb_name,))
                 mb_size = self.cursor.fetchone()[0] if self.cursor.rowcount > 0 else None
 
-                size_order = ["Mini-ITX", "Micro-ATX", "ATX"]
+                # Порядок размеров с добавлением размеров
+                size_order = ["Mini-ITX", "Micro-ATX", "ATX", "E-ATX", "Super Tower", "Full Tower"]
                 if (case_size and mb_size and
                         size_order.index(case_size) < size_order.index(mb_size)):
                     errors.append(f"Корпус ({case_size}) слишком мал для материнской платы ({mb_size})")
+
+            # Проверка мощности блока питания
+            total_power = 0
+            if "Процессор" in self.selected_components:
+                cpu_name = self.selected_components["Процессор"].get("Название")
+                self.cursor.execute("""
+                    SELECT "Потребляемость" FROM "Процессор" WHERE "Название" = %s
+                """, (cpu_name,))
+                result = self.cursor.fetchone()
+                total_power += float(result[0]) if result else 0
+
+            if "Видеокарта" in self.selected_components:
+                gpu_name = self.selected_components["Видеокарта"].get("Название")
+                self.cursor.execute("""
+                    SELECT "Потребляемость" FROM "Видеокарта" WHERE "Название" = %s
+                """, (gpu_name,))
+                result = self.cursor.fetchone()
+                total_power += float(result[0]) if result else 0
+
+            if "Блок питания" in self.selected_components:
+                psu_name = self.selected_components["Блок питания"].get("Название")
+                self.cursor.execute("""
+                    SELECT "Мощность" FROM "Блок питания" WHERE "Название" = %s
+                """, (psu_name,))
+                result = self.cursor.fetchone()
+                psu_power = float(result[0]) if result else 0
+
+                if psu_power < total_power * 1.2:
+                    errors.append(f"Недостаточная мощность БП: {psu_power}W < {total_power * 1.2:.0f}W")
+
+            # Если есть ошибки - отображаем и прерываем сохранение
+            if errors:
+                error_msg = "Ошибки совместимости:\n\n• " + "\n• ".join(errors)
+                QMessageBox.critical(self, "Ошибка", error_msg)
+                return
+
+            # Сохранение сборки
+            print(f"Начинаем сохранение сборки. Название: {build_name}, Общая цена: {self.total_price}")
+            # Обновление или создание сборки
+            if is_edit and build_id:
+                self.cursor.execute("""
+                    UPDATE "Сборки"
+                    SET "Название_сборки" = %s, "Общая_цена" = %s
+                    WHERE "id_сборки" = %s
+                """, (build_name, self.total_price, build_id))
+            else:
+                self.cursor.execute("""
+                    INSERT INTO "Сборки" ("Название_сборки", "Общая_цена", "id_Пользователя", "Статус_сборки")
+                    VALUES (%s, %s, %s, %s) RETURNING "id_сборки"
+                """, (build_name, self.total_price, self.get_user_id(), 'Активная'))
+                build_id = self.cursor.fetchone()[0]
+
+            # Обновление компонентов сборки
+            for category, component in self.selected_components.items():
+                component_name = component.get("Название") if isinstance(component, dict) else component
+                component_name = None if not component_name or component_name == "Не выбрано" else component_name
+
+                self.cursor.execute(f"""
+                    SELECT 1 FROM "Компоненты_сборки"
+                    WHERE "id_сборки" = %s AND "{category}" IS NOT NULL
+                """, (build_id,))
+
+                if self.cursor.fetchone():
+                    self.cursor.execute(f"""
+                        UPDATE "Компоненты_сборки"
+                        SET "{category}" = %s
+                        WHERE "id_сборки" = %s
+                    """, (component_name, build_id))
+                else:
+                    self.cursor.execute(f"""
+                        INSERT INTO "Компоненты_сборки" ("id_сборки", "{category}")
+                        VALUES (%s, %s)
+                    """, (build_id, component_name))
+
+            self.db.conn.commit()
+            QMessageBox.information(self, "Успех", "Сборка успешно сохранена!")
+            self.show_active_builds_screen()
+
+        except Exception as e:
+            self.db.conn.rollback()
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении сборки:\n{str(e)}")
+            print(f"Ошибка сохранения: {e}")
 
             # 4. Проверка мощности блока питания
             total_power = 0
@@ -678,76 +987,64 @@ class MainWindow(QMainWindow):
 
         self.db.conn.commit()
 
-    def create_edit_build_screen(self, build_id, build_name="", total_price=0):
-        print(f"Создаём экран редактирования для сборки: {build_name} (ID: {build_id})")  # Отладка
+    def delete_build(self, build_id):
+        # Удаление сборки из базы данных
+        try:
+            # Удаляем сборку по ID
+            self.cursor.execute(
+                """
+                DELETE FROM "Сборки" 
+                WHERE "id_сборки" = %s
+                """,
+                (build_id,)
+            )
+            self.db.conn.commit()
+            QMessageBox.information(self, "Успех", "Сборка успешно удалена.")
+            self.show_active_builds_screen()  # Перезагружает список активных сборок
+        except Exception as e:
+            self.db.conn.rollback()  # Откатываем изменения в случае ошибки
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при удалении сборки: {e}")
 
-        screen = QWidget()
-        layout = QVBoxLayout()
+    def show_finished_builds(self):
+        # Отображение завершённых сборок
+        try:
+            # Очищаем список перед загрузкой
+            self.finished_builds_list.clear()
+            # Получаем ID текущего пользователя
+            user_id = self.get_user_id()
+            # Проверяем, авторизован ли пользователь
+            if user_id is None:  # Предполагаем, что None — это неавторизованный пользователь
+                self.finished_builds_list.addItem("Вы не авторизованы!")
+                return
+            # Выполняем запрос к базе данных для получения завершённых сборок
+            self.cursor.execute("""
+                SELECT "Название_сборки", "Общая_цена"
+                FROM "Сборки"
+                WHERE "Статус_сборки" = 'Завершена' AND "id_Пользователя" = %s
+            """, (user_id,))
+            builds = self.cursor.fetchall()
+            # Если сборок нет, отображаем сообщение
+            if not builds:
+                self.finished_builds_list.addItem("У вас нет завершённых сборок.")
+                return
+            # Добавляем завершённые сборки в список
+            for build_name, total_price in builds:
+                self.finished_builds_list.addItem(f"{build_name} — {total_price} руб.")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить завершённые сборки: {e}")
 
-        # Верхняя панель
-        top_bar = QHBoxLayout()
-        back_button = QPushButton()
-        back_button.setIcon(QIcon("back.png"))
-        back_button.setFixedSize(60, 40)
-        back_button.clicked.connect(self.show_active_builds_screen)
-
-        title_label = QLabel("Редактирование сборки")
-        title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
-
-        save_btn = QPushButton("Сохранить")
-        save_btn.clicked.connect(self.save_build)  # Обработчик для сохранения
-
-        cancel_btn = QPushButton("Отменить")
-        cancel_btn.clicked.connect(self.cancel_selection)  # Очистка выбора компонентов
-
-        top_bar.addWidget(back_button)
-        top_bar.addWidget(title_label)
-        top_bar.addStretch()
-        top_bar.addWidget(save_btn)
-        top_bar.addWidget(cancel_btn)
-
-        # Секция выбора комплектующих
-        components_layout = QHBoxLayout()
-        self.component_buttons = {}
-
-        components = [
-            ("Видеокарта", "Видеокарта"),
-            ("Процессор", "Процессор"),
-            ("Мат. плата", "Материнская плата"),
-            ("Корпус", "Корпус"),
-            ("Охлаждение процессора", "Охлаждение процессора"),
-            ("Оперативная память", "Оперативная память"),
-            ("Накопитель", "Накопитель"),
-            ("Блок питания", "Блок питания"),
-            ("Доп. детали", "Доп. детали"),
-        ]
-
-        for label, category in components:
-            btn = QPushButton(label)
-            btn.setFixedHeight(40)
-            if category in self.selected_components:
-                btn.setText(f"{label}\n{self.selected_components[category]}")
-            btn.clicked.connect(lambda checked, c=category: self.show_components_for_category(c))
-            components_layout.addWidget(btn)
-            self.component_buttons[category] = btn
-
-        layout.addLayout(top_bar)
-        layout.addLayout(components_layout)
-
-        # Метка для отображения цены сборки
-        self.build_price_label = QLabel(f"Цена: {total_price} руб.")
-        layout.addWidget(self.build_price_label)
-
-        # Поле для редактирования названия сборки
-        bottom_bar = QHBoxLayout()
-        new_build_label = QLabel("Название сборки: ")
-        self.build_name_input = QLineEdit(build_name)
-        bottom_bar.addWidget(new_build_label)
-        bottom_bar.addWidget(self.build_name_input)
-
-        layout.addLayout(bottom_bar)
-        screen.setLayout(layout)
-        return screen
+    def _get_component_price(self, category, component_name):
+        """Возвращает цену компонента по его названию и категории."""
+        try:
+            self.cursor.execute(f"""
+                SELECT "Цена" FROM "{category}"
+                WHERE "Название" = %s
+            """, (component_name,))
+            result = self.cursor.fetchone()
+            return result[0] if result else 0
+        except Exception as e:
+            print(f"Ошибка получения цены: {e}")
+            return 0
 
     def save_changes(self):
         try:
@@ -818,55 +1115,35 @@ class MainWindow(QMainWindow):
         editor_window.show()
 
     def select_component(self, item):
-        # Выбирает компонент для текущей категории.
         try:
-            # Получаем текст из элемента списка
             lines = item.text().split("\n")
             component_name = lines[0].split(": ")[1]
+            category = self.current_category
 
-            # Проверяем, есть ли уже выбранный компонент в текущей категории
-            old_price = 0
-            if self.current_category in self.selected_components:
-                selected_component = self.selected_components[self.current_category]
-                # Проверяем, является ли компонент словарём
-                if isinstance(selected_component, dict):
-                    old_price = selected_component.get("Цена", 0)
-                else:
-                    # Если сохранён компонент в виде строки, очищаем старое значение
-                    old_price = 0
+            # Удаляем старую цену, если компонент уже выбран
+            if category in self.selected_components:
+                old_component = self.selected_components[category]
+                if old_component:
+                    self.total_price -= old_component.get("Цена", 0)
 
-            # Удаляем старую цену из общей суммы
-            self.total_price -= old_price
-
-            # Получаем данные о компоненте из базы данных
+            # Получаем цену нового компонента
             self.cursor.execute(f"""
-                SELECT "Цена"
-                FROM "{self.current_category}"
+                SELECT "Цена" FROM "{category}"
                 WHERE "Название" = %s
             """, (component_name,))
             price_data = self.cursor.fetchone()
+            component_price = price_data[0] if price_data else 0
 
-            if not price_data:
-                QMessageBox.warning(self, "Ошибка", f"Компонент {component_name} не найден в базе данных.")
-                return
-
-            component_price = price_data[0]
-
-            # Обновляем выбранный компонент
-            self.selected_components[self.current_category] = {
+            # Обновляем выбранный компонент и цену
+            self.selected_components[category] = {
                 "Название": component_name,
                 "Цена": component_price
             }
-
-            # Добавляем новую цену к общей сумме
             self.total_price += component_price
 
-            # Обновляем текст кнопки для категории
-            if self.current_category in self.component_buttons:
-                self.component_buttons[self.current_category].setText(f"{self.current_category}\n{component_name}")
-
-            # Обновляем отображение общей цены
+            # Обновляем интерфейс
             self.update_build_price()
+            self.component_buttons[category].setText(f"{category}\n{component_name}")
 
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка при выборе компонента: {e}")
@@ -973,7 +1250,7 @@ class MainWindow(QMainWindow):
                 "Накопитель": {"table": "Накопитель", "fields": ["Название", "Цена", "Описание", "Объём"]},
                 "Доп. детали": {"table": "Доп. детали", "fields": ["Название", "Цена", "Описание"]}
             }
-            
+
             table_info = category_mapping.get(category)
             if not table_info:
                 self.new_build_list.addItem("Категория не найдена")
