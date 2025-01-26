@@ -280,7 +280,7 @@ class MainWindow(QMainWindow):
         # Создание кнопок
         btn_new_build = QPushButton("Новая сборка")
         btn_new_build.setMinimumSize(200, 70)  # Устанавливаем минимальный размер кнопки
-        btn_new_build.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.new_build_screen))
+        btn_new_build.clicked.connect(self.show_new_build_screen)
 
         btn_components = QPushButton("Склад комплектующих")
         btn_components.setMinimumSize(200, 70)
@@ -354,11 +354,11 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Ошибка", f"Не удалось завершить сборку: {e}")
 
     def create_new_build_screen(self, build_name=None, total_price=0, build_id=None):
-        # Сброс данных перед созданием новой сборки
+        # Явный сброс данных при создании экрана
         self.selected_components = {}
         self.total_price = 0
         self.build_id = None
-        self.current_category = None  # Сброс текущей категории
+        self.current_category = None
 
         # Явный сброс текста кнопок категорий
         if hasattr(self, 'component_buttons'):
@@ -445,6 +445,26 @@ class MainWindow(QMainWindow):
 
         screen.setLayout(layout)
         return screen
+
+    def reset_build_state(self):
+        # Сбрасываем все переменные, связанные со сборкой
+        self.selected_components = {}
+        self.total_price = 0
+        self.build_id = None
+        self.current_category = None
+
+        # Сбрасываем текст кнопок категорий
+        for category, button in self.component_buttons.items():
+            button.setText(category)
+            button.setEnabled(True)  # Включаем кнопки, если они были отключены
+
+        # Очищаем список компонентов и поле названия
+        if hasattr(self, 'new_build_list'):
+            self.new_build_list.clear()
+        if hasattr(self, 'build_name_input'):
+            self.build_name_input.clear()
+
+        print("Состояние сборки сброшено.")
 
     def create_edit_build_screen(self, build_id, build_name=None, total_price=None):
         self.current_category = None
@@ -660,35 +680,55 @@ class MainWindow(QMainWindow):
                 "Ошибка",
                 f"Не удалось открыть редактор:\n{str(e)}"
             )
-            print(f"DEBUG: {traceback.format_exc()}")
 
     def cancel_selection(self):
-        # Очистка всех выбранных компонентов
+        # Полный сброс данных
         self.selected_components.clear()
-        self.new_build_list.clear()
         self.total_price = 0
-        self.build_price_label.setText(f"Цена: {self.total_price} руб.")
+        self.build_id = None
+        self.current_category = None
 
-        # Сбрасывание текста на кнопках категорий
+        # Очистка списка компонентов и названия сборки
+        self.new_build_list.clear()
+        self.build_name_input.clear()
+
+        # Сброс текста кнопок категорий
         for category, button in self.component_buttons.items():
             button.setText(category)
 
-        print("Выбор компонентов отменен. Цена сброшена, текст на кнопках сброшен.")
+        # Обновление отображения цены
+        self.update_build_price()
 
-    def cancel_selection(self):
-        # Очистка все выбранные компоненты
-        self.selected_components.clear()  # Очистка словаря выбранных компонентов
-        self.new_build_list.clear()  # Очистка списока компонентов
+        # Пересоздание экрана новой сборки
+        self.new_build_screen = self.create_new_build_screen()
+        self.central_widget.removeWidget(self.central_widget.currentWidget())
+        self.central_widget.addWidget(self.new_build_screen)
+        self.central_widget.setCurrentWidget(self.new_build_screen)
 
-        # Сброс цены
-        self.total_price = 0
-        self.build_price_label.setText(f"Цена: {self.total_price} руб.")  # Обновление текста метки с ценой
+        print("Все данные сборки сброшены.")
 
-        # Сбрасывание текста на кнопках категорий
-        for category, button in self.component_buttons.items():
-            button.setText(category)  # Восстановление исходного текста кнопок категорий
+    def show_new_build_screen(self):
+        """Переход на экран создания новой сборки с полным сбросом состояния"""
+        try:
+            # Сбрасываем все данные предыдущей сборки
+            self.reset_build_state()
 
-        print("Выбор компонентов отменен. Цена сброшена, текст на кнопках сброшен.")
+            # Принудительно пересоздаём экран (если он уже был создан)
+            if hasattr(self, 'new_build_screen'):
+                self.central_widget.removeWidget(self.new_build_screen)
+                self.new_build_screen.deleteLater()
+
+            # Создаём новый экран "с нуля"
+            self.new_build_screen = self.create_new_build_screen()
+            self.central_widget.addWidget(self.new_build_screen)
+
+            # Переключаемся на обновлённый экран
+            self.central_widget.setCurrentWidget(self.new_build_screen)
+            print("Экран новой сборки пересоздан")
+
+        except Exception as e:
+            print(f"Ошибка при создании экрана: {str(e)}")
+            QMessageBox.critical(self, "Ошибка", f"Не удалось открыть экран сборки: {str(e)}")
 
     def save_build(self, build_id=None):
         if not self.is_user_logged_in():
@@ -702,7 +742,7 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            # ========== ПРОВЕРКИ СОВМЕСТИМОСТИ ==========
+            # Проверка совместимости
             errors = []
             required_components = [
                 ("Процессор", "Процессор"),
@@ -730,7 +770,7 @@ class MainWindow(QMainWindow):
                     errors.append(
                         f"Несовместимость сокетов: Процессор ({cpu_socket}) ≠ Материнская плата ({mb_socket})")
 
-            # Проверка типа памяти ОЗУ
+            # Проверка типа памяти
             if "Оперативная память" in self.selected_components and "Материнская плата" in self.selected_components:
                 ram_name = self.selected_components["Оперативная память"]["Название"]
                 mb_name = self.selected_components["Материнская плата"]["Название"]
@@ -785,13 +825,13 @@ class MainWindow(QMainWindow):
                         self,
                         "Внимание",
                         f"{error_msg}\n\nВы хотите продолжить без этих компонентов?",
-                        QMessageBox.ДА | QMessageBox.НЕТ
+                        QMessageBox.Yes | QMessageBox.No
                     )
 
-                    if reply == QMessageBox.НЕТ:
+                    if reply == QMessageBox.No:
                         return
 
-            # ========== СОХРАНЕНИЕ ДАННЫХ ==========
+            # Сохранение данных
             if build_id:  # Редактирование существующей сборки
                 self.cursor.execute("""
                     UPDATE "Сборки"
@@ -830,7 +870,6 @@ class MainWindow(QMainWindow):
 
             self.db.conn.commit()
             QMessageBox.information(self, "Успех", "Сборка успешно сохранена!")
-            self.show_active_builds_screen()
 
         except Exception as e:
             self.db.conn.rollback()
