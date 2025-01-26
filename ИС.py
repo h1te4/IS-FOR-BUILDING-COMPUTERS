@@ -1,6 +1,5 @@
 import sys
 import traceback
-
 import psycopg2
 import bcrypt
 import os
@@ -94,9 +93,9 @@ class MainWindow(QMainWindow):
         # Создаем кнопку с картинкой для профиля
         profile_button = QPushButton()
         profile_button.setIcon(QIcon("man.png"))
-        profile_button.setFixedSize(50, 50) # Размер кнопки
-        profile_button.setStyleSheet("border: none;")  # Убираем рамку вокруг кнопки
-        profile_button.clicked.connect(self.show_profile_screen)  # Переход в профиль
+        profile_button.setFixedSize(50, 50)
+        profile_button.setStyleSheet("border: none;")
+        profile_button.clicked.connect(self.show_profile_screen)
         return profile_button
 
     def create_profile_screen(self):
@@ -104,23 +103,23 @@ class MainWindow(QMainWindow):
         screen = QWidget()
         self.profile_layout = QVBoxLayout()  # Основной макет
 
-        # === Верхняя панель ===
+        # Верхняя панель
         top_bar = QHBoxLayout()
         back_button = QPushButton()
         back_button.setIcon(QIcon("back.png"))
         back_button.setFixedSize(50, 50)
-        back_button.clicked.connect(self.show_main_menu_screen)  # Возврат на главный экран
+        back_button.clicked.connect(self.show_main_menu_screen)
         top_bar.addWidget(back_button)
         top_bar.addStretch()
 
         # Заголовок "Профиль"
         title_label = QLabel("Профиль")
         title_label.setAlignment(Qt.AlignCenter)  # Центрируем текст
-        title_label.setStyleSheet("font-size: 24px; font-weight: bold; margin: 20px;")  # Стилизация текста
+        title_label.setStyleSheet("font-size: 24px; font-weight: bold; margin: 20px;")
         self.profile_layout.addLayout(top_bar)
         self.profile_layout.addWidget(title_label)
 
-        # === Информация о профиле ===
+        # Информация о профиле
         self.profile_info = QLabel()  # Используем QLabel для отображения данных
         self.profile_info.setStyleSheet("font-size: 18px; font-weight: normal;")
         self.profile_info.setAlignment(Qt.AlignLeft)  # Текст выравнивается влево
@@ -170,7 +169,6 @@ class MainWindow(QMainWindow):
 
     def get_user_id(self):
         if not self.username:
-            print("Пользователь не авторизован: self.username = None")
             return None
         self.cursor.execute("SELECT id_Пользователя FROM Пользователи WHERE Никнейм = %s", (self.username,))
         result = self.cursor.fetchone()
@@ -262,14 +260,14 @@ class MainWindow(QMainWindow):
 
         # Верхняя панель
         top_layout = QHBoxLayout()
-        profile_btn = QPushButton()  # Создание кнопки профиля
-        profile_btn.setIcon(QIcon("man.png"))  # Устанавливаем иконку
-        profile_btn.setIconSize(profile_btn.sizeHint())  # Задаём размер иконки
-        profile_btn.setFixedSize(50, 50)  # Устанавливаем фиксированный размер кнопки
-        profile_btn.clicked.connect(self.show_profile_screen)  # Обработчик для открытия экрана профиля
+        profile_btn = QPushButton()
+        profile_btn.setIcon(QIcon("man.png"))
+        profile_btn.setIconSize(profile_btn.sizeHint())
+        profile_btn.setFixedSize(50, 50)
+        profile_btn.clicked.connect(self.show_profile_screen)
 
         top_layout.addStretch()  # Добавляем отступ слева
-        top_layout.addWidget(profile_btn)  # Добавляем кнопку профиля
+        top_layout.addWidget(profile_btn)
 
         # Центральная панель с кнопками
         buttons_layout = QGridLayout()  # Используем сетку для размещения кнопок
@@ -279,7 +277,7 @@ class MainWindow(QMainWindow):
 
         # Создание кнопок
         btn_new_build = QPushButton("Новая сборка")
-        btn_new_build.setMinimumSize(200, 70)  # Устанавливаем минимальный размер кнопки
+        btn_new_build.setMinimumSize(200, 70)
         btn_new_build.clicked.connect(self.show_new_build_screen)
 
         btn_components = QPushButton("Склад комплектующих")
@@ -330,11 +328,9 @@ class MainWindow(QMainWindow):
 
     def finish_build(self, build_id):
         try:
-            print(f"Завершаем сборку с ID: {build_id}")
-
             # Проверяем, есть ли соединение с базой данных
             if self.db.conn.closed:
-                self.db = Database()  # Повторное подключение
+                self.db = Database()
                 self.cursor = self.db.cursor
 
             # Обновляем статус сборки на 'Завершена'
@@ -393,9 +389,9 @@ class MainWindow(QMainWindow):
         # Кнопка "Профиль"
         profile_btn = QPushButton()
         profile_btn.setIcon(QIcon("man.png"))
-        profile_btn.setFixedSize(50, 50)  # Размер кнопки
-        profile_btn.clicked.connect(self.show_profile_screen)  # Переход в профиль
-        top_bar.addWidget(profile_btn)  # Добавляем кнопку "Профиль" в top_bar
+        profile_btn.setFixedSize(50, 50)
+        profile_btn.clicked.connect(self.show_profile_screen)
+        top_bar.addWidget(profile_btn)
         layout.addLayout(top_bar)
 
         # Секция выбора компонентов
@@ -441,8 +437,6 @@ class MainWindow(QMainWindow):
         bottom_bar.addWidget(self.build_name_input)
         layout.addLayout(bottom_bar)
 
-
-
         screen.setLayout(layout)
         return screen
 
@@ -456,15 +450,13 @@ class MainWindow(QMainWindow):
         # Сбрасываем текст кнопок категорий
         for category, button in self.component_buttons.items():
             button.setText(category)
-            button.setEnabled(True)  # Включаем кнопки, если они были отключены
+            button.setEnabled(True)
 
         # Очищаем список компонентов и поле названия
         if hasattr(self, 'new_build_list'):
             self.new_build_list.clear()
         if hasattr(self, 'build_name_input'):
             self.build_name_input.clear()
-
-        print("Состояние сборки сброшено.")
 
     def create_edit_build_screen(self, build_id, build_name=None, total_price=None):
         self.current_category = None
@@ -542,9 +534,9 @@ class MainWindow(QMainWindow):
             # Кнопка "Профиль"
             profile_btn = QPushButton()
             profile_btn.setIcon(QIcon("man.png"))
-            profile_btn.setFixedSize(50, 50)  # Размер кнопки
-            profile_btn.clicked.connect(self.show_profile_screen)  # Переход в профиль
-            top_bar.addWidget(profile_btn)  # Добавляем кнопку "Профиль" в top_bar
+            profile_btn.setFixedSize(50, 50)
+            profile_btn.clicked.connect(self.show_profile_screen)
+            top_bar.addWidget(profile_btn)
             layout.addLayout(top_bar)
 
             # Секция выбора компонентов
@@ -592,7 +584,7 @@ class MainWindow(QMainWindow):
             return screen
 
     def edit_build(self, b_id):
-        """Открывает экран редактирования существующей сборки"""
+        # Открывает экран редактирования существующей сборки
         try:
             # Проверка соединения с БД
             if self.db.conn.closed:
@@ -708,7 +700,7 @@ class MainWindow(QMainWindow):
         print("Все данные сборки сброшены.")
 
     def show_new_build_screen(self):
-        """Переход на экран создания новой сборки с полным сбросом состояния"""
+        # Переход на экран создания новой сборки с полным сбросом состояния
         try:
             # Сбрасываем все данные предыдущей сборки
             self.reset_build_state()
@@ -912,7 +904,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Ошибка", error_msg)
                 return
 
-            # ================== СОХРАНЕНИЕ ДАННЫХ ==================
+            # Сохранение данных
             print(f"Начинаем сохранение сборки. Название: {build_name}, Общая цена: {self.total_price}")
 
             # Обновление или создание сборки
@@ -959,55 +951,6 @@ class MainWindow(QMainWindow):
             self.db.conn.rollback()
             QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении сборки:\n{str(e)}")
             print(f"Ошибка сохранения: {e}")
-
-    def check_psu_compatibility(self):
-        try:
-            total_power = 0
-            # Суммируем потребление всех компонентов
-            for category in ["Процессор", "Видеокарта", "Охлаждение процессора"]:
-                if category in self.selected_components:
-                    comp_name = self.selected_components[category].get("Название")
-                    self.cursor.execute(f"""
-                        SELECT "Потребляемость" FROM "{category}" 
-                        WHERE "Название" = %s
-                    """, (comp_name,))
-                    result = self.cursor.fetchone()
-                    total_power += float(result[0]) if result else 0
-
-            # Проверка запаса мощности
-            if "Блок питания" in self.selected_components:
-                psu_name = self.selected_components["Блок питания"].get("Название")
-                self.cursor.execute("""
-                    SELECT "Мощность" FROM "Блок питания" 
-                    WHERE "Название" = %s
-                """, (psu_name,))
-                psu_power = float(self.cursor.fetchone()[0])
-
-                if psu_power < total_power * 1.2:
-                    return f"Мощность БП недостаточна: {psu_power}W < {total_power * 1.2:.0f}W"
-
-            return None
-        except Exception as e:
-            print(f"Ошибка проверки питания: {str(e)}")
-            return "Ошибка расчета мощности"
-
-    def update_build_components(self, build_id, updated_components):
-        self.cursor.execute("""
-            UPDATE "Компоненты_сборки"
-            SET 
-                "Процессор" = %s, 
-                "Видеокарта" = %s, 
-                "Материнская плата" = %s, 
-                "Корпус" = %s, 
-                "Охлаждение процессора" = %s, 
-                "Оперативная память" = %s, 
-                "Накопитель" = %s, 
-                "Блок питания" = %s, 
-                "Доп. детали" = %s
-            WHERE "id_сборки" = %s
-        """, (*updated_components, build_id))
-
-        self.db.conn.commit()
 
     def delete_build(self, build_id):
         # Удаление сборки из базы данных
@@ -1069,74 +1012,6 @@ class MainWindow(QMainWindow):
             print(f"Ошибка получения цены: {e}")
             return 0
 
-    def save_changes(self):
-        try:
-            # Получаем значения выбранных компонентов из комбобоксов
-            updated_components = {}
-            for category in ["Процессор", "Видеокарта", "Материнская плата", "Корпус",
-                             "Охлаждение процессора", "Оперативная память", "Накопитель",
-                             "Блок питания", "Доп. детали"]:
-                combo_box = self.central_widget.findChild(QComboBox, category)
-                selected_component = combo_box.currentText()
-                updated_components[category] = selected_component
-
-            # Обновляем данные в базе для текущей сборки
-            self.cursor.execute("""
-                UPDATE "Компоненты_сборки"
-                SET "Процессор" = %s, "Видеокарта" = %s, "Материнская плата" = %s,
-                    "Корпус" = %s, "Охлаждение процессора" = %s, "Оперативная память" = %s,
-                    "Накопитель" = %s, "Блок питания" = %s, "Доп. детали" = %s
-                WHERE "id_сборки" = %s
-            """, (
-                updated_components["Процессор"],
-                updated_components["Видеокарта"],
-                updated_components["Материнская плата"],
-                updated_components["Корпус"],
-                updated_components["Охлаждение процессора"],
-                updated_components["Оперативная память"],
-                updated_components["Накопитель"],
-                updated_components["Блок питания"],
-                updated_components["Доп. детали"],
-                self.current_build_id
-            ))
-
-            # Подтверждаем изменения в базе данных
-            self.connection.commit()
-
-            # Показываем сообщение об успешном сохранении
-            QMessageBox.information(self, "Успех", "Изменения успешно сохранены!")
-
-            # Возвращаемся на экран с активными сборками (или любой другой нужный экран)
-            self.show_active_builds_screen()
-
-        except Exception as e:
-            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить изменения: {e}")
-
-    def update_selected_component(self, component_name, category):
-        # Обновляем выбранный компонент для категории
-        self.selected_components[category] = component_name
-
-        # Обновляем текст кнопки категории
-        self.update_category_button(category)
-
-        # Возвращаемся на экран редактирования сборки
-        self.return_to_edit_screen()
-
-    def update_category_button(self, category):
-        # Находим кнопку для выбранной категории и обновляем ее текст
-        buttons = self.central_widget.findChildren(QPushButton)
-        for button in buttons:
-            if button.text().startswith(category):
-                button.setText(f"{category}: {self.selected_components[category]}")
-
-    def return_to_edit_screen(self):
-        # Возвращаемся к экрану редактирования сборки
-        self.central_widget.setCurrentWidget(self.central_widget.widget(0))
-
-    def open_build_editor(self, build_id, build_name, total_price):
-        editor_window = BuildEditor(self, build_id, build_name, total_price)
-        editor_window.show()
-
     def select_component(self, item):
         try:
             if not item:  # Добавляем проверку на наличие item
@@ -1179,13 +1054,8 @@ class MainWindow(QMainWindow):
         self.build_price_label.setText(f"Цена: {self.total_price} руб.")
 
     def check_compatibility(self, selected_component, category):
-        """
-        Проверяет совместимость выбранного компонента с другими комплектующими.
 
-        :param selected_component: Название выбранного компонента (строка)
-        :param category: Категория выбранного компонента (строка)
-        :return: Список совместимых компонентов для других категорий
-        """
+        # Проверяет совместимость выбранного компонента с другими комплектующими.
         try:
             if category == "Процессор":
                 # Получаем совместимые материнские платы по сокету процессора
@@ -1231,7 +1101,7 @@ class MainWindow(QMainWindow):
             filters = []
             params = []
 
-            # Процессор ↔ Материнская плата (сокет)
+            # Процессор и Материнская плата (сокет)
             if category == "Материнская плата" and "Процессор" in self.selected_components:
                 cpu_name = self.selected_components["Процессор"]["Название"]
                 self.cursor.execute("SELECT \"Сокет\" FROM \"Процессор\" WHERE \"Название\" = %s", (cpu_name,))
@@ -1239,7 +1109,7 @@ class MainWindow(QMainWindow):
                 filters.append("\"Сокет\" = %s")
                 params.append(socket)
 
-            # Материнская плата ↔ Процессор (обратная проверка)
+            # Материнская плата и Процессор (обратная проверка)
             elif category == "Процессор" and "Материнская плата" in self.selected_components:
                 mb_name = self.selected_components["Материнская плата"]["Название"]
                 self.cursor.execute("SELECT \"Сокет\" FROM \"Материнская плата\" WHERE \"Название\" = %s", (mb_name,))
@@ -1247,7 +1117,7 @@ class MainWindow(QMainWindow):
                 filters.append("\"Сокет\" = %s")
                 params.append(socket)
 
-            # Материнская плата ↔ Оперативная память (тип памяти)
+            # Материнская плата и Оперативная память (тип памяти)
             if category == "Оперативная память" and "Материнская плата" in self.selected_components:
                 mb_name = self.selected_components["Материнская плата"]["Название"]
                 self.cursor.execute("SELECT \"Тип_памяти\" FROM \"Материнская плата\" WHERE \"Название\" = %s",
@@ -1256,7 +1126,7 @@ class MainWindow(QMainWindow):
                 filters.append("\"Тип_памяти\" = %s")
                 params.append(mem_type)
 
-            # Корпус ↔ Материнская плата (размер)
+            # Корпус и Материнская плата (размер)
             if category == "Материнская плата" and "Корпус" in self.selected_components:
                 case_name = self.selected_components["Корпус"]["Название"]
                 self.cursor.execute("SELECT \"Размер\" FROM \"Корпус\" WHERE \"Название\" = %s", (case_name,))
@@ -1264,7 +1134,7 @@ class MainWindow(QMainWindow):
                 filters.append("\"Размер\" <= %s")
                 params.append(case_size)
 
-            # Формируем SQL-запрос
+            # SQL-запрос
             category_mapping = {
                 "Видеокарта": {"table": "Видеокарта", "fields": ["Название", "Потребляемость", "Цена"]},
                 "Процессор": {"table": "Процессор", "fields": ["Название", "Сокет", "Потребляемость", "Цена"]},
@@ -1333,7 +1203,7 @@ class MainWindow(QMainWindow):
         # Добавляем top_bar в основной layout
         layout.addLayout(top_bar)
 
-        # === Кнопка "Добавить комплектующее" ===
+        # Кнопка
         add_component_button = QPushButton("Добавить комплектующее")
         add_component_button.setFixedHeight(40)  # Устанавливаем высоту кнопки
         add_component_button.clicked.connect(self.show_add_component_screen)  # Переход на экран добавления
@@ -1358,6 +1228,16 @@ class MainWindow(QMainWindow):
         return screen
 
     def show_add_component_screen(self):
+        # Проверяем, авторизован ли пользователь
+        if not self.is_user_logged_in():
+            QMessageBox.warning(
+                self,
+                "Ошибка",
+                "Вы должны войти в профиль, чтобы добавлять комплектующие в сборку!"
+            )
+            return  # Прерываем выполнение, если пользователь не авторизован
+
+        # Если авторизован - продолжаем показ экрана добавления
         screen = self.create_add_component_screen()
         self.central_widget.addWidget(screen)
         self.central_widget.setCurrentWidget(screen)
@@ -1533,7 +1413,7 @@ class MainWindow(QMainWindow):
             }
             table_name = table_mapping.get(category)
 
-            # Формируем SQL-запрос
+            # SQL-запрос
             query = f"""
                 INSERT INTO "{table_name}" ("Название", "Описание", {f'"Сокет", ' if socket else ''}{f'"Объём", ' if capacity else ''}{f'"Мощность", ' if power else ''}"Цена")
                 VALUES (%s, %s, {f'%s, ' if socket else ''}{f'%s, ' if capacity else ''}{f'%s, ' if power else ''}%s)
@@ -1750,7 +1630,7 @@ class MainWindow(QMainWindow):
                 return
 
             # Извлекаем категорию и название компонента
-            first_line = lines[0]  # Например: "Видеокарта: NVIDIA RTX 4060"
+            first_line = lines[0]
             try:
                 category, component_name = first_line.split(": ")
             except ValueError:
@@ -1875,7 +1755,7 @@ class MainWindow(QMainWindow):
         self.central_widget.setCurrentWidget(self.active_builds_list.parentWidget())
 
     def load_active_builds(self):
-        """Загрузка и отображение активных сборок пользователя"""
+        # Загрузка и отображение активных сборок пользователя
         try:
             self.active_builds_list.clear()
 
@@ -2040,90 +1920,6 @@ class AuthWindow(QWidget):
             print(f"Ошибка: {e}")
             QMessageBox.critical(self, "Ошибка", f"Произошла ошибка: {e}")
 
-
-
-    def login(self, username, password):
-        # Пример логики аутентификации
-        self.cursor.execute(
-            "SELECT id_Пользователя FROM Пользователи WHERE Никнейм = %s AND Пароль = %s",
-            (username, password),
-        )
-        result = self.cursor.fetchone()
-        if result:
-            self.username = username
-            return True
-        else:
-            return False
-
-    def get_user_id(self):
-        if not self.username:
-            return None
-        self.cursor.execute("SELECT id_Пользователя FROM Пользователи WHERE Никнейм = %s", (self.username,))
-        result = self.cursor.fetchone()
-        return result[0] if result else None
-
-    def handle_registration(self):
-        # Обработка регистрации пользователя
-        username = self.username_input.text().strip()
-        password = self.password_input.text().strip()
-
-        if not username or not password:
-            QMessageBox.warning(self, "Ошибка", "Введите логин и пароль")
-            return
-
-        try:
-            # Проверяем, существует ли пользователь
-            self.parent.cursor.execute("SELECT 1 FROM Пользователи WHERE Никнейм = %s", (username,))
-            if self.parent.cursor.fetchone():
-                QMessageBox.warning(self, "Ошибка", "Пользователь с таким никнеймом уже существует")
-                return
-
-            # Регистрируем нового пользователя
-            hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-            self.parent.cursor.execute(
-                "INSERT INTO Пользователи (Никнейм, Пароль, Дата_регистрации) VALUES (%s, %s, CURRENT_DATE)",
-                (username, hashed_password)
-            )
-            self.parent.db.conn.commit()
-            QMessageBox.information(self, "Успех", "Вы успешно зарегистрировались")
-            self.close()
-        except Exception as e:
-            self.parent.db.conn.rollback()
-            print(f"Ошибка регистрации: {e}")
-            QMessageBox.critical(self, "Ошибка", f"Ошибка регистрации: {e}")
-
-    def handle_login(self):
-        # Обработка входа пользователя
-        username = self.username_input.text().strip()
-        password = self.password_input.text().strip()
-
-        if not username or not password:
-            QMessageBox.warning(self, "Ошибка", "Введите логин и пароль")
-            return
-
-        try:
-            # Проверяем, существует ли пользователь
-            self.parent.cursor.execute("SELECT Пароль FROM Пользователи WHERE Никнейм = %s", (username,))
-            result = self.parent.cursor.fetchone()
-            print(f"Результат проверки пользователя: {result}")  # Отладка
-
-            if not result:
-                QMessageBox.warning(self, "Ошибка", "Пользователь с таким логином не найден")
-                return
-
-            # Проверяем пароль
-            stored_password = result[0]
-            if bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
-                QMessageBox.information(self, "Успех", "Вы успешно вошли")
-                self.parent.login_user(username)  # Передаём имя пользователя в MainWindow
-                self.close()
-            else:
-                QMessageBox.warning(self, "Ошибка", "Неправильный пароль")
-        except Exception as e:
-            print(f"Ошибка входа: {e}")
-            QMessageBox.critical(self, "Ошибка", f"Ошибка при входе: {e}")
-
-
 class Database:
     def __init__(self):
         self.conn = psycopg2.connect(**DB_CONFIG)
@@ -2140,11 +1936,6 @@ class Database:
     def close(self):
         self.cursor.close()
         self.conn.close()
-
-    def closeEvent(self, event):
-        self.db.close()
-        event.accept()
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
