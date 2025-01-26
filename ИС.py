@@ -36,16 +36,6 @@ DB_CONFIG = {
     'port': os.getenv('DB_PORT')
 }
 
-def create_profile_button(self):
-    profile_button = QPushButton()
-    profile_button.setIcon(QIcon("man.png"))
-    profile_button.setFixedSize(50, 50)   # Размер кнопки
-    profile_button.setStyleSheet("border: none;")  # Убираем рамку вокруг кнопки
-    profile_button.clicked.connect(self.show_profile_screen)  # Переход в профиль
-
-    return profile_button
-
-
 class MainWindow(QMainWindow):
     def __init__(self, connection, parent=None):
         super(MainWindow, self).__init__(parent)
@@ -108,13 +98,6 @@ class MainWindow(QMainWindow):
         profile_button.setStyleSheet("border: none;")  # Убираем рамку вокруг кнопки
         profile_button.clicked.connect(self.show_profile_screen)  # Переход в профиль
         return profile_button
-
-    def add_profile_button(self):
-        # Создаем макет для кнопки профиля
-        top_layout = QHBoxLayout()
-        profile_button = self.create_profile_button()  # Получаем кнопку профиля
-        top_layout.addWidget(profile_button)
-        top_layout.addStretch()  # Добавляем отступ справа
 
     def create_profile_screen(self):
         # Создание экрана профиля
@@ -227,6 +210,17 @@ class MainWindow(QMainWindow):
         return result[0] if result else "Неизвестно"
 
     def show_main_menu_screen(self):
+        # Сброс всех данных текущей сборки
+        self.selected_components = {}
+        self.total_price = 0
+        self.build_id = None
+        self.current_category = None  # Добавляем сброс текущей категории
+
+        # Сброс текста кнопок категорий
+        for category, button in self.component_buttons.items():
+            button.setText(category)
+
+        # Переключение на главный экран
         self.central_widget.setCurrentWidget(self.main_menu)
 
     def register_user(self):
@@ -360,11 +354,16 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Ошибка", f"Не удалось завершить сборку: {e}")
 
     def create_new_build_screen(self, build_name=None, total_price=0, build_id=None):
-        self.component_buttons = {}  # Важно очищать кнопки при создании нового экрана
-        self.selected_components = {} # Добавлен build_id
-        self.total_price = total_price
-        self.current_category = None
-        self.build_id = build_id  # Сохраняем build_id для использования в save_build
+        # Сброс данных перед созданием новой сборки
+        self.selected_components = {}
+        self.total_price = 0
+        self.build_id = None
+        self.current_category = None  # Сброс текущей категории
+
+        # Явный сброс текста кнопок категорий
+        if hasattr(self, 'component_buttons'):
+            for category, button in self.component_buttons.items():
+                button.setText(category)
 
         screen = QWidget()
         layout = QVBoxLayout()
@@ -377,7 +376,8 @@ class MainWindow(QMainWindow):
         back_button.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.main_menu))
         top_bar.addWidget(back_button)
 
-        title_label = QLabel("Новsssая сборка")
+
+        title_label = QLabel("Новая сборка")
         title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
         top_bar.addWidget(title_label)
         top_bar.addStretch()
@@ -390,8 +390,12 @@ class MainWindow(QMainWindow):
         cancel_btn.clicked.connect(self.cancel_selection)
         top_bar.addWidget(cancel_btn)
 
-        profile_btn = self.create_profile_button()
-        top_bar.addWidget(profile_btn)
+        # Кнопка "Профиль"
+        profile_btn = QPushButton()
+        profile_btn.setIcon(QIcon("man.png"))
+        profile_btn.setFixedSize(50, 50)  # Размер кнопки
+        profile_btn.clicked.connect(self.show_profile_screen)  # Переход в профиль
+        top_bar.addWidget(profile_btn)  # Добавляем кнопку "Профиль" в top_bar
         layout.addLayout(top_bar)
 
         # Секция выбора компонентов
@@ -436,6 +440,8 @@ class MainWindow(QMainWindow):
         bottom_bar.addWidget(new_build_label)
         bottom_bar.addWidget(self.build_name_input)
         layout.addLayout(bottom_bar)
+
+
 
         screen.setLayout(layout)
         return screen
@@ -513,8 +519,12 @@ class MainWindow(QMainWindow):
             cancel_btn.clicked.connect(self.cancel_selection)
             top_bar.addWidget(cancel_btn)
 
-            profile_btn = self.create_profile_button()
-            top_bar.addWidget(profile_btn)
+            # Кнопка "Профиль"
+            profile_btn = QPushButton()
+            profile_btn.setIcon(QIcon("man.png"))
+            profile_btn.setFixedSize(50, 50)  # Размер кнопки
+            profile_btn.clicked.connect(self.show_profile_screen)  # Переход в профиль
+            top_bar.addWidget(profile_btn)  # Добавляем кнопку "Профиль" в top_bar
             layout.addLayout(top_bar)
 
             # Секция выбора компонентов
@@ -651,16 +661,19 @@ class MainWindow(QMainWindow):
                 f"Не удалось открыть редактор:\n{str(e)}"
             )
             print(f"DEBUG: {traceback.format_exc()}")
+
     def cancel_selection(self):
-        """Сбрасывает выбранные компоненты и обновляет интерфейс"""
-        self.selected_components = {}
+        # Очистка всех выбранных компонентов
+        self.selected_components.clear()
+        self.new_build_list.clear()
         self.total_price = 0
-
-        # Сбрасываем текст кнопок категорий
-        for category, button in self.component_buttons.items():
-            button.setText(category.split()[-1])  # Удаляем название компонента
-
         self.build_price_label.setText(f"Цена: {self.total_price} руб.")
+
+        # Сбрасывание текста на кнопках категорий
+        for category, button in self.component_buttons.items():
+            button.setText(category)
+
+        print("Выбор компонентов отменен. Цена сброшена, текст на кнопках сброшен.")
 
     def cancel_selection(self):
         # Очистка все выбранные компоненты
@@ -755,9 +768,28 @@ class MainWindow(QMainWindow):
                     errors.append(f"Недостаточная мощность БП: {psu_power}W < {total_power * 1.2:.0f}W")
 
             if errors:
-                error_msg = "Ошибки совместимости:\n\n• " + "\n• ".join(errors)
-                QMessageBox.critical(self, "Ошибка", error_msg)
-                return
+                # Разделяем ошибки на критические и некритические
+                critical_errors = [e for e in errors if "Не выбран обязательный компонент" not in e]
+                non_critical_errors = [e for e in errors if "Не выбран обязательный компонент" in e]
+
+                # Если есть критические ошибки - показываем и прерываем
+                if critical_errors:
+                    error_msg = "Критические ошибки:\n\n• " + "\n• ".join(critical_errors)
+                    QMessageBox.critical(self, "Ошибка", error_msg)
+                    return
+
+                # Если есть только некритические - задаем вопрос
+                if non_critical_errors:
+                    error_msg = "Отсутствуют обязательные компоненты:\n\n• " + "\n• ".join(non_critical_errors)
+                    reply = QMessageBox.question(
+                        self,
+                        "Внимание",
+                        f"{error_msg}\n\nВы хотите продолжить без этих компонентов?",
+                        QMessageBox.ДА | QMessageBox.НЕТ
+                    )
+
+                    if reply == QMessageBox.НЕТ:
+                        return
 
             # ========== СОХРАНЕНИЕ ДАННЫХ ==========
             if build_id:  # Редактирование существующей сборки
@@ -805,12 +837,8 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении сборки:\n{str(e)}")
             print(f"Ошибка сохранения: {e}")
 
-        except Exception as e:
-            self.db.conn.rollback()
-            QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении сборки:\n{str(e)}")
-            print(f"Ошибка сохранения: {e}")
 
-            # 4. Проверка мощности блока питания
+            # Проверка мощности блока питания
             total_power = 0
             if "Процессор" in self.selected_components:
                 cpu_name = self.selected_components["Процессор"].get("Название")
@@ -1072,6 +1100,9 @@ class MainWindow(QMainWindow):
 
     def select_component(self, item):
         try:
+            if not item:  # Добавляем проверку на наличие item
+                return
+
             lines = item.text().split("\n")
             component_name = lines[0].split(": ")[1]
             category = self.current_category
@@ -1255,7 +1286,7 @@ class MainWindow(QMainWindow):
 
         # Кнопка "Профиль"
         profile_btn = QPushButton()
-        profile_btn.setIcon(QIcon("man.png"))  # Убедитесь, что файл man.png существует
+        profile_btn.setIcon(QIcon("man.png"))
         profile_btn.setFixedSize(50, 50)  # Размер кнопки
         profile_btn.clicked.connect(self.show_profile_screen)  # Переход в профиль
         top_bar.addWidget(profile_btn)  # Добавляем кнопку "Профиль" в top_bar
@@ -1793,6 +1824,7 @@ class MainWindow(QMainWindow):
             # Кнопка "Назад"
             back_button = QPushButton()
             back_button.setIcon(QIcon("back.png"))
+            back_button.setFixedSize(50, 50)
             back_button.clicked.connect(lambda: self.central_widget.setCurrentWidget(self.main_menu))
             layout.addWidget(back_button)
 
